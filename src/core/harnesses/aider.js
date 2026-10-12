@@ -1,0 +1,30 @@
+export const aider = {
+  id: 'aider',
+  name: 'Aider',
+  aliases: ['aider-chat'],
+  vendor: 'Aider',
+  kind: 'cli',
+  platforms: ['darwin', 'linux', 'win32'],
+  defaultTTL: 90,
+  risk: 'low',
+  deleteEnabled: false,
+  docs: 'https://aider.chat/docs/faq.html',
+  summary: '主要垃圾在项目内：.aider.chat.history.md 只增不减，.aider.tags.cache.v3/ 为仓库索引缓存。全局 ~/.aider 通常很小。首批仅报告。',
+  targets: [
+    {
+      id: 'home',
+      kind: 'session-store',
+      label: '全局目录 (~/.aider)',
+      paths: ['~/.aider'],
+      unit: 'child-entry',
+      ageBasis: 'leaf-max-mtime',
+      orphan: { type: 'none' },
+      removable: false,
+    },
+  ],
+  neverDelete: ['~/.aider.conf.yml'],
+  notes: [
+    '项目内 .aider.tags.cache.v3/ 与 .aider.chat.history.md 需要项目根扫描，P0 暂不启用写入。',
+  ],
+  projectMarkers: ['.aider.tags.cache.v3', '.aider.chat.history.md', '.aider.input.history'],
+};

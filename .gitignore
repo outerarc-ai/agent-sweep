@@ -1,0 +1,27 @@
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# build / coverage
+dist/
+coverage/
+*.tsbuildinfo
+
+# local reports and scans
+.agent-sweep/
+reports/
+*.report.json
+*.report.html
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# env
+.env
+.env.*
+!.env.example

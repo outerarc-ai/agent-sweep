@@ -1,0 +1,11 @@
+version: 2
+updates:
+  # 本项目零运行时依赖，只需跟踪 GitHub Actions 的版本更新
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    labels:
+      - dependencies

@@ -1,0 +1,59 @@
+{
+  "name": "agent-sweep",
+  "version": "0.1.0",
+  "description": "Cross-harness cleanup for AI coding agent residue: scan, review, and reclaim stale session workspaces, worktrees and caches across Claude Code, Codex, Cursor, Trae and more.",
+  "keywords": [
+    "ai-agent",
+    "cleanup",
+    "harness",
+    "claude-code",
+    "codex",
+    "cursor",
+    "trae",
+    "worktree",
+    "disk-space",
+    "cli"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "agent-sweep": "./bin/agent-sweep.js"
+  },
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "scripts": {
+    "start": "node ./bin/agent-sweep.js",
+    "test": "node --test",
+    "lint": "node ./scripts/lint.js",
+    "check": "node ./scripts/selfcheck.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/outerarc-ai/agent-sweep.git"
+  },
+  "bugs": {
+    "url": "https://github.com/outerarc-ai/agent-sweep/issues"
+  },
+  "homepage": "https://github.com/outerarc-ai/agent-sweep#readme",
+  "author": "outerarc-ai",
+  "dependencies": {},
+  "devDependencies": {},
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ]
+}

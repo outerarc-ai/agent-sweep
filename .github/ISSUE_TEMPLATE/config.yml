@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a safety vulnerability
+    url: https://github.com/outerarc-ai/agent-sweep/security/advisories/new
+    about: If agent-sweep touched something it should have protected, report it privately here instead of opening a public issue.
+  - name: Questions and usage help
+    url: https://github.com/outerarc-ai/agent-sweep/discussions
+    about: Ask how to scan, plan or restore without filing a bug.

@@ -1,0 +1,12 @@
+export { loadRegistry, describeHarness, availableHarnesses, buildRegistryGuards } from './core/registry.js';
+export { scan, scanHarness, resolveEncodedCwd } from './core/scanner.js';
+export { analyzeUnits, analyzeUnit, summarize } from './core/analyzer.js';
+export { buildPlan, selectActions, PLAN_SCHEMA } from './core/planner.js';
+export { executePlan } from './core/executor.js';
+export { createTrash, defaultTrashRoot, TRASH_SCHEMA } from './core/trash.js';
+export { buildJsonReport, JSON_SCHEMA } from './core/reporter/json.js';
+export { renderHtmlReport } from './core/reporter/html.js';
+export { resolveStrategy, classifyUnit, scoreUnit, CIRCLES, CIRCLE_META } from './lib/strategy.js';
+export { buildGuardSet, evaluateProtection } from './safety/guards.js';
+export { ALL_HARNESSES } from './core/harnesses/index.js';
+export { main } from './cli/index.js';

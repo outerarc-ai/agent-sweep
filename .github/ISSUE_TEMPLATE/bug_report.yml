@@ -1,0 +1,68 @@
+name: Bug report
+description: Something scanned, planned or cleaned incorrectly
+title: '[bug] '
+labels: ['bug', 'triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do **not** paste absolute paths that reveal your username or project
+        names — the scan output contains real filesystem paths. Redact them.
+
+        If the tool touched something that should have been protected, stop and
+        read [SECURITY.md](../blob/main/SECURITY.md) instead of filing here.
+  - type: input
+    id: version
+    attributes:
+      label: agent-sweep version
+      description: Output of `agent-sweep version`
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS and Node version
+      description: e.g. macOS 15.1, Node 22.4.0
+    validations:
+      required: true
+  - type: dropdown
+    id: command
+    attributes:
+      label: Which command misbehaved?
+      options:
+        - scan
+        - plan
+        - clean
+        - restore
+        - trash
+        - harnesses
+        - doctor
+    validations:
+      required: true
+  - type: textarea
+    id: command-line
+    attributes:
+      label: Exact command
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include relevant output with paths redacted.
+    validations:
+      required: true
+  - type: textarea
+    id: harness
+    attributes:
+      label: Affected harness (if known)
+      description: e.g. cursor, trae, claude-code — from `agent-sweep harnesses`
+    validations:
+      required: false

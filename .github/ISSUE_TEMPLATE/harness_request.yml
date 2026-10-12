@@ -1,0 +1,46 @@
+name: Harness request
+description: Add coverage for an AI coding agent harness that is missing
+title: '[harness] '
+labels: ['harness', 'enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Harnesses are added as declarations, not code. The more you can tell us
+        about where the tool stores state, the faster this can land.
+  - type: input
+    id: name
+    attributes:
+      label: Harness name
+      description: e.g. "Zed AI", "Continue", "OpenHands"
+    validations:
+      required: true
+  - type: input
+    id: docs
+    attributes:
+      label: Link to documentation on where state is stored
+      description: Prefer an official docs URL that names the config/data directories.
+    validations:
+      required: false
+  - type: textarea
+    id: paths
+    attributes:
+      label: Directories you observed it writing to
+      description: Redact your username. Global dirs, session dirs, worktrees, caches, logs.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: must-keep
+    attributes:
+      label: Anything that must never be deleted
+      description: Memory files, credentials, MCP registrations, license state, etc.
+    validations:
+      required: false
+  - type: input
+    id: platform
+    attributes:
+      label: Platform(s)
+      description: macOS / Linux / Windows
+    validations:
+      required: false

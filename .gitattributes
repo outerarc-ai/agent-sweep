@@ -1,0 +1,19 @@
+# 统一换行符与文本判定；仓库内一律使用 LF
+* text=auto eol=lf
+
+*.js    text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+
+# 二进制资源不做文本转换
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+
+# 生成的报告不参与 diff，也不计入语言统计
+*.report.json  linguist-generated -diff
+*.report.html  linguist-generated -diff
