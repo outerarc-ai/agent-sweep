@@ -45,5 +45,5 @@ test('toPosix converts separators', () => {
 });
 
 test('uniquePaths dedupes normalized paths', () => {
-  assert.deepEqual(uniquePaths(['/a/b', '/a/./b', '/a//b', '', null]), ['/a/b']);
+  assert.deepEqual(uniquePaths(['/a/b', '/a/./b', '/a//b', '', null]), [path.normalize('/a/b')]);
 });

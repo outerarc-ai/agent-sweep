@@ -21,7 +21,11 @@ async function writeOld(file, days) {
   await fs.utimes(file, when, when);
 }
 
-test('resolveEncodedCwd resolves a live host project', async () => {
+// encoded-cwd reconstruction rebuilds a path from its separator-encoded form,
+// which only makes sense for POSIX paths; Windows always reports "unknown".
+const posixOnly = process.platform === 'win32' ? 'encoded-cwd probing is POSIX-only' : false;
+
+test('resolveEncodedCwd resolves a live host project', { skip: posixOnly }, async () => {
   const dir = await mktmp('sweep-enc-');
   const encoded = dir.replace(/\//g, '-');
   const result = await resolveEncodedCwd(encoded);
@@ -31,8 +35,14 @@ test('resolveEncodedCwd resolves a live host project', async () => {
 });
 
 test('resolveEncodedCwd flags a missing host project as orphan', async () => {
-  const result = await resolveEncodedCwd('-zzz-no-such-project-999');
+  const result = await resolveEncodedCwd('-zzz-no-such-project-999', { platform: 'linux' });
   assert.equal(result.status, 'orphan');
+  assert.equal(result.resolved, null);
+});
+
+test('resolveEncodedCwd reports unknown on Windows', async () => {
+  const result = await resolveEncodedCwd('-anything', { platform: 'win32' });
+  assert.equal(result.status, 'unknown');
   assert.equal(result.resolved, null);
 });
 

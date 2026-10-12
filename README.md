@@ -37,7 +37,7 @@ npm install -g agent-sweep
 agent-sweep scan
 ```
 
-要求 Node.js `>= 18.17.0`。支持 macOS / Linux / Windows（Windows 上进程占用检测自动退化为不可用）。
+要求 Node.js `>= 18.17.0`。支持 macOS / Linux / Windows。Windows 上有两处能力自动退化：进程占用检测不可用；会话目录的 `encoded-cwd` 孤儿判定不可用（该判定依赖 POSIX 路径编码），此时该目标按「未知」处理而非误判为孤儿。
 
 ## 快速开始
 
