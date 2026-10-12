@@ -22,6 +22,7 @@ const BOOLEAN_FLAGS = new Map([
   ['V', 'version'],
   ['force', 'force'],
   ['all', 'all'],
+  ['open', 'open'],
 ]);
 
 const VALUE_FLAGS = new Map([
@@ -36,6 +37,8 @@ const VALUE_FLAGS = new Map([
   ['concurrency', 'concurrency'],
   ['label', 'label'],
   ['keep-days', 'keepDays'],
+  ['port', 'port'],
+  ['host', 'host'],
 ]);
 
 export function parseSize(input) {
@@ -140,6 +143,7 @@ export function parseArgs(argv = []) {
   if (flags.keepDays !== undefined) flags.keepDaysValue = parseDays(flags.keepDays);
   if (flags.minScore !== undefined) flags.minScoreValue = Number(flags.minScore);
   if (flags.concurrency !== undefined) flags.concurrencyValue = Number(flags.concurrency);
+  if (flags.port !== undefined) flags.portValue = Number(flags.port);
 
   return { flags, positionals };
 }
@@ -164,4 +168,7 @@ export const FLAG_DOCS = {
   quiet: '静默',
   verbose: '详细日志',
   noColor: '关闭颜色',
+  port: '本地 Web UI 端口（默认 7317）',
+  host: '本地 Web UI 绑定地址（默认 127.0.0.1）',
+  open: '启动本地 Web UI 后自动打开浏览器',
 };

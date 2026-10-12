@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>agent-sweep · 本地清理控制台</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="logo">◆</span>
+      <div><b>agent-sweep</b><small>本地清理控制台</small></div>
+    </div>
+    <ul id="steps" class="steps"></ul>
+    <div id="env" class="env"></div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <h1 id="viewTitle">扫描</h1>
+        <p id="viewSub" class="sub"></p>
+      </div>
+      <div id="topActions" class="topActions"></div>
+    </header>
+    <section id="view" class="view"></section>
+  </main>
+</div>
+
+<div id="selbar"></div>
+<div id="modalRoot" class="modalRoot"></div>
+<div id="toasts" class="toasts"></div>
+
+<script id="bootstrap" type="application/json">__AGENT_SWEEP_BOOTSTRAP__</script>
+<script src="/app.js" type="module"></script>
+</body>
+</html>

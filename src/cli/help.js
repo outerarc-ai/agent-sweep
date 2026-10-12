@@ -11,6 +11,7 @@ export const USAGE = `agent-sweep — 跨 harness 的智能体残留工作区清
   clean                执行清理（默认移入回收站，可还原）
   restore <batchId>    从回收站还原某一批次
   trash [list|empty]   查看或清空回收站
+  ui                   启动本地 Web UI（扫描/勾选/预演/执行/还原 全流程）
   harnesses            列出内置 harness 注册表
   doctor               环境与注册表自检
   help                 显示帮助
@@ -33,6 +34,9 @@ export const USAGE = `agent-sweep — 跨 harness 的智能体残留工作区清
   --html <file>         写出自包含 HTML 报告
   --trash-root <path>   自定义回收站根目录
   --concurrency <n>     并发测量数（默认 8）
+  --port <n>            本地 Web UI 端口（默认 7317）
+  --host <addr>         本地 Web UI 绑定地址（默认 127.0.0.1）
+  --open                启动 Web UI 后自动打开浏览器
   --verbose, -v         详细日志
   --quiet, -q           静默
   --no-color            关闭颜色
@@ -44,6 +48,7 @@ export const USAGE = `agent-sweep — 跨 harness 的智能体残留工作区清
   agent-sweep plan --harness trae --ttl trae=45
   agent-sweep clean --include-review --dry-run
   agent-sweep clean --yes
+  agent-sweep ui --open
   agent-sweep restore 20261012-114500-abcd
 
 安全模型:

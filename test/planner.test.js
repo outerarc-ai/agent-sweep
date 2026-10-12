@@ -86,3 +86,25 @@ test('buildPlan with no matching units yields an empty plan', () => {
   assert.equal(plan.totals.actionCount, 0);
   assert.equal(plan.pruneRepos.length, 0);
 });
+
+test('selectActions with explicit ids keeps the hard safety line', () => {
+  const safe = analyzed({ path: '/h/.trae-cn/worktrees/p/b', relPath: 'p/b' });
+  const review = analyzed({ circle: CIRCLES.REVIEW, circleReason: 'stale-medium-risk', path: '/h/.trae-cn/work/s1', relPath: 's1' });
+  const protectedUnit = analyzed({ circle: CIRCLES.PROTECTED, protected: true, path: '/h/.claude/plugins/x', relPath: 'plugins/x' });
+  const reportOnly = analyzed({ deleteEnabled: false, path: '/h/.copilot/cache', relPath: 'cache' });
+  const units = [safe, review, protectedUnit, reportOnly];
+
+  const ids = [toAction(safe).id, toAction(review).id, toAction(protectedUnit).id, toAction(reportOnly).id];
+  const picked = selectActions(units, { ids });
+
+  // Explicit selection still cannot reach protected units or report-only harnesses.
+  assert.equal(picked.length, 2);
+  assert.deepEqual(new Set(picked.map((u) => u.circle)), new Set([CIRCLES.SAFE, CIRCLES.REVIEW]));
+});
+
+test('buildPlan records explicit selection mode', () => {
+  const unit = analyzed();
+  const plan = buildPlan([unit], { options: { ids: [toAction(unit).id] }, now: 0, platform: 'darwin' });
+  assert.equal(plan.totals.actionCount, 1);
+  assert.equal(plan.options.selectionMode, 'explicit');
+});

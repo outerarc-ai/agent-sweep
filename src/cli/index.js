@@ -10,6 +10,7 @@ import * as restoreCommand from './commands/restore.js';
 import * as trashCommand from './commands/trash.js';
 import * as harnessesCommand from './commands/harnesses.js';
 import * as doctorCommand from './commands/doctor.js';
+import * as uiCommand from './commands/ui.js';
 
 const COMMANDS = new Map([
   ['scan', scanCommand],
@@ -19,6 +20,9 @@ const COMMANDS = new Map([
   ['trash', trashCommand],
   ['harnesses', harnessesCommand],
   ['doctor', doctorCommand],
+  ['ui', uiCommand],
+  ['serve', uiCommand],
+  ['web', uiCommand],
 ]);
 
 function resolveLoggerLevel(flags) {

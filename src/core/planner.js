@@ -3,9 +3,13 @@ import { PLATFORM } from '../lib/platform.js';
 
 export const PLAN_SCHEMA = 'agent-sweep/plan@1';
 
+export function actionId(unit) {
+  return `${unit.harnessId}:${unit.targetId}:${unit.relPath}`;
+}
+
 export function toAction(unit) {
   return {
-    id: `${unit.harnessId}:${unit.targetId}:${unit.relPath}`,
+    id: actionId(unit),
     harnessId: unit.harnessId,
     harnessName: unit.harnessName,
     targetId: unit.targetId,
@@ -33,11 +37,21 @@ export function toAction(unit) {
   };
 }
 
-export function selectActions(units, { circles = [CIRCLES.SAFE], minScore = 0, harnessIds = null } = {}) {
+export function selectActions(
+  units,
+  { circles = [CIRCLES.SAFE], minScore = 0, harnessIds = null, ids = null } = {},
+) {
   const allowed = new Set(circles);
+  const explicit = ids && ids.length > 0 ? new Set(ids) : null;
   return units.filter((unit) => {
-    if (!allowed.has(unit.circle)) return false;
     if (!unit.deleteEnabled) return false;
+    if (explicit) {
+      // Explicit selection still cannot cross the hard safety line: protected
+      // (memory, credentials, MCP registry, in-use) units are never actionable.
+      if (unit.circle === CIRCLES.PROTECTED) return false;
+      return explicit.has(actionId(unit));
+    }
+    if (!allowed.has(unit.circle)) return false;
     if (minScore > 0 && unit.score < minScore) return false;
     if (harnessIds && harnessIds.length > 0 && !harnessIds.includes(unit.harnessId)) return false;
     return true;
@@ -59,6 +73,7 @@ export function buildPlan(units, { summary, options = {}, now = Date.now(), plat
     circles: options.circles,
     minScore: options.minScore,
     harnessIds: options.harnessIds,
+    ids: options.ids,
   });
 
   const protectedUnits = units.filter((u) => u.circle === CIRCLES.PROTECTED);
@@ -74,6 +89,7 @@ export function buildPlan(units, { summary, options = {}, now = Date.now(), plat
       minScore: options.minScore,
       ttlOverrides: options.ttlOverrides || {},
       harnessIds: options.harnessIds || null,
+      selectionMode: options.ids && options.ids.length > 0 ? 'explicit' : 'by-circle',
       directDelete: Boolean(options.directDelete),
     },
     summary: summary

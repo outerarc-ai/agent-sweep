@@ -8,12 +8,17 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SRC = path.join(ROOT, 'src');
 
+// Browser assets ship as plain files under src/web/public and are never imported
+// by Node, so they are exempt from the module-load and heuristic checks below.
+const SKIP_DIRS = new Set([path.join(SRC, 'web', 'public')]);
+
 const problems = [];
 const warnings = [];
 
 const rel = (p) => path.relative(ROOT, p);
 
 async function collect(dir, out = []) {
+  if (SKIP_DIRS.has(dir)) return out;
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     const full = path.join(dir, entry.name);

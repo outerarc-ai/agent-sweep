@@ -10,7 +10,7 @@
 - **只读优先**：扫描、分析、计划三步不写盘；只有 `clean` 才可能改动磁盘。
 - **可还原**：默认把对象移入本地回收站并留下还原清单，`restore` 一键回滚。
 - **硬约束安全**：记忆文件、MCP 注册、凭据配置、活跃工作区进入「永不清理」圈层，任何参数都无法越权。
-- **零外部依赖**：只用 Node 内置模块，无 `dependencies`，无 CDN 资源，报告为自包含 HTML。
+- **零外部依赖**：只用 Node 内置模块，无 `dependencies`，无 CDN 资源，报告为自包含 HTML；本地 Web UI 同样零依赖。
 - **注册表驱动**：新增一个 harness 只需追加一份声明，扫描引擎无需改动。
 
 ## 为什么需要它
@@ -61,6 +61,37 @@ agent-sweep clean --include-review --yes
 agent-sweep trash list
 agent-sweep restore 20261012-114530-9qmh
 ```
+
+## 本地 Web UI
+
+不想记命令时，用本地 Web UI 走完整流程：
+
+```bash
+agent-sweep ui --open
+```
+
+浏览器打开 `http://127.0.0.1:7317/`，界面按五步组织，与 CLI 共用同一条流水线：
+
+1. **扫描** — 勾选 harness、设定 TTL / 最小体积 / 最低评分，只读枚举候选。
+2. **勾选** — 按圈层、harness、类型、评分与关键字筛选，逐项挑选要处理的对象。
+3. **预演** — 用与真实执行相同的规则复检每个对象，展示将被处理与被拦下的明细，不写盘。
+4. **执行** — 选择「移入回收站」或「直接删除」（后者需输入 `DELETE` 二次确认），执行后展示释放量与 prune 结果。
+5. **回收站** — 查看批次清单、还原预演与还原。
+
+安全边界与 CLI 完全一致，并额外加固：
+
+- 仅监听 `127.0.0.1`（除非显式 `--host`），启动时生成**会话令牌**，所有 API 调用必须携带该令牌。
+- 校验 `Origin`，拒绝跨站请求；静态资源做路径穿越防护。
+- 服务端**永不信任前端提交的路径**：执行时按 id 在服务端重建计划，并再次复核安全硬约束与进程占用。
+- 直接删除需要请求体中的 `confirmText: "DELETE"`，与界面上的输入确认双重把关。
+
+| 选项 | 说明 |
+| --- | --- |
+| `--port <n>` | 监听端口（默认 `7317`） |
+| `--host <addr>` | 绑定地址（默认 `127.0.0.1`；非回环地址会打印告警） |
+| `--open` | 启动后自动打开浏览器 |
+
+扫描相关选项（`--harness` / `--ttl` / `--min-size` / `--no-active-check` / `--trash-root` 等）同样作为 Web UI 的默认值生效。
 
 ## 安全模型：三圈层
 
@@ -117,6 +148,7 @@ agent-sweep harnesses trae --verbose
 | `clean` | 执行清理（默认移入回收站，可还原） |
 | `restore <batchId>` | 从回收站还原某一批次 |
 | `trash [list\|empty]` | 查看或清空回收站 |
+| `ui` | 启动本地 Web UI（扫描/勾选/预演/执行/还原 全流程） |
 | `harnesses [id]` | 列出内置 harness 注册表 |
 | `doctor` | 环境与注册表自检 |
 | `help` / `version` | 帮助 / 版本 |
@@ -141,6 +173,7 @@ agent-sweep harnesses trae --verbose
 | `--html <file>` | 写出自包含 HTML 报告 |
 | `--trash-root <path>` | 自定义回收站根目录 |
 | `--concurrency <n>` | 并发测量数（默认 8） |
+| `--port <n>` / `--host <addr>` / `--open` | 本地 Web UI 端口 / 绑定地址 / 自动打开浏览器 |
 | `--verbose, -v` / `--quiet, -q` / `--no-color` | 日志与颜色控制 |
 
 ## 判定方法

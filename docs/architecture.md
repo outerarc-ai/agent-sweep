@@ -22,7 +22,11 @@ agent-sweep/
 │   │   ├── context.js        # 组装注册表/护栏/策略/回收站，供命令复用
 │   │   ├── help.js           # 用法文本与版本
 │   │   ├── prompt.js         # 交互确认（非 TTY 时拒绝）
-│   │   └── commands/         # scan / plan / clean / restore / trash / harnesses / doctor
+│   │   └── commands/         # scan / plan / clean / restore / trash / harnesses / doctor / ui
+│   ├── web/                  # 本地 Web UI（零依赖）
+│   │   ├── service.js        # 复用 createContext 的纯业务函数（扫描/计划/执行/回收站）
+│   │   ├── server.js         # node:http 服务、会话令牌、Origin 校验、静态资源
+│   │   └── public/           # 前端 SPA（index.html / styles.css / app.js）
 │   ├── core/
 │   │   ├── registry.js       # 注册表加载、校验、别名解析、目标路径展开
 │   │   ├── harnesses/        # 8 份 harness 声明（每文件一个）
@@ -90,6 +94,16 @@ agent-sweep/
 - **终端**：宽字符对齐的表格（中文按双宽计算），带圈层着色。
 - **JSON**：`agent-sweep/report@1`，供下游工具消费。
 - **HTML**：单文件自包含，内联 CSS、无脚本、无外部资源；所有动态内容经 HTML 转义。
+
+## 本地 Web UI
+
+`agent-sweep ui` 在本地起一个零依赖的 `node:http` 服务，界面按「扫描 → 勾选 → 预演 → 执行 → 回收站」五步组织，**与 CLI 共用同一条流水线**（`web/service.js` 直接调用 `createContext`，不复制任何判定逻辑）。
+
+- **服务层**（`web/server.js`）：仅监听 `127.0.0.1`（除非显式 `--host`）；启动生成会话令牌，所有 API 必须携带；校验 `Origin` 拒绝跨站；静态资源做路径穿越防护。
+- **业务层**（`web/service.js`）：`runScan` / `planSelection` / `runExecution` / `listTrash` / `restoreBatch` 等纯函数，输入输出均为可序列化结构。
+- **前端**（`web/public/`）：无构建步骤的 SPA，与服务端同构地渲染圈层、评分与明细。
+
+安全不变量与 CLI 一致，并额外加固：**服务端永不信任前端提交的路径**——执行时按动作 id 在服务端重建计划并再次复核硬约束与进程占用；直接删除需请求体携带 `confirmText: "DELETE"`，与界面输入确认双重把关。
 
 ## 数据流不变量
 

@@ -264,7 +264,12 @@ export async function scan(registry, options = {}) {
   }
 
   const results = [];
-  for (const harness of harnesses) {
+  const total = harnesses.length;
+  for (let index = 0; index < harnesses.length; index += 1) {
+    const harness = harnesses[index];
+    if (typeof options.onHarness === 'function') {
+      options.onHarness({ index, total, harness });
+    }
     results.push(await scanHarness(harness, { guardSet, openFiles, options: { ...options, home } }));
   }
 
