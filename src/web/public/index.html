@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<title>agent-sweep · 本地清理控制台</title>
+<title>agent-sweep</title>
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -12,16 +12,19 @@
   <aside class="sidebar">
     <div class="brand">
       <span class="logo">◆</span>
-      <div><b>agent-sweep</b><small>本地清理控制台</small></div>
+      <div class="brand-text"><b>agent-sweep</b><small id="brandSub"></small></div>
     </div>
     <ul id="steps" class="steps"></ul>
-    <div id="env" class="env"></div>
+    <div class="side-foot">
+      <div id="localeSwitch" class="segmented" role="group" aria-label="Language"></div>
+      <div id="env" class="env"></div>
+    </div>
   </aside>
 
   <main class="main">
     <header class="topbar">
-      <div>
-        <h1 id="viewTitle">扫描</h1>
+      <div class="topbar-text">
+        <h1 id="viewTitle"></h1>
         <p id="viewSub" class="sub"></p>
       </div>
       <div id="topActions" class="topActions"></div>
@@ -35,6 +38,7 @@
 <div id="toasts" class="toasts"></div>
 
 <script id="bootstrap" type="application/json">__AGENT_SWEEP_BOOTSTRAP__</script>
+<script src="/i18n.js"></script>
 <script src="/app.js" type="module"></script>
 </body>
 </html>

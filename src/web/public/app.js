@@ -1,5 +1,9 @@
 const boot = JSON.parse(document.getElementById('bootstrap').textContent || '{}');
 const TOKEN = boot.token || '';
+const I18N = window.I18N;
+const t = I18N.t;
+const fmtNum = I18N.fmtNum;
+const fmtDate = I18N.fmtDate;
 
 const viewEl = document.getElementById('view');
 const stepsEl = document.getElementById('steps');
@@ -10,6 +14,8 @@ const topActionsEl = document.getElementById('topActions');
 const selbarEl = document.getElementById('selbar');
 const modalRoot = document.getElementById('modalRoot');
 const toastsEl = document.getElementById('toasts');
+const brandSubEl = document.getElementById('brandSub');
+const localeSwitchEl = document.getElementById('localeSwitch');
 
 /* ------------------------------ helpers ------------------------------ */
 
@@ -40,13 +46,18 @@ function fmtAge(ms) {
   return `${(days / 365.25).toFixed(1)}y`;
 }
 
-function fmtNum(n) { return new Intl.NumberFormat('en-US').format(Number(n) || 0); }
+/* circle labels + reasons are machine codes from the backend; map them
+ * to localized text, falling back to the raw code when unknown. */
+function circleLabel(key) {
+  const label = t(`circle.${key}`);
+  return label === `circle.${key}` ? key : label;
+}
 
-function fmtDate(input) {
-  const d = input instanceof Date ? input : new Date(input);
-  if (Number.isNaN(d.getTime())) return '—';
-  const p = (v) => String(v).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+function reasonLabel(reason) {
+  if (!reason) return '';
+  const base = String(reason).split(':')[0];
+  const label = t(`reason.${base}`);
+  return label === `reason.${base}` ? reason : label;
 }
 
 async function api(path, { method = 'GET', body } = {}) {
@@ -71,14 +82,14 @@ function toast(message, kind = '') {
 
 function closeModal() { modalRoot.classList.remove('open'); modalRoot.innerHTML = ''; }
 
-function openModal({ title, bodyHtml, confirmLabel = '确认', danger = false, onConfirm }) {
+function openModal({ title, bodyHtml, confirmLabel = t('confirm'), danger = false, onConfirm }) {
   modalRoot.innerHTML = `
     <div class="modalBack" data-modal-close></div>
     <div class="modal" role="dialog" aria-modal="true">
       <header>${esc(title)}</header>
       <div class="body">${bodyHtml}</div>
       <footer>
-        <button class="btn" data-modal-close>取消</button>
+        <button class="btn" data-modal-close>${esc(t('cancel'))}</button>
         <button class="btn ${danger ? 'danger' : 'primary'}" data-modal-confirm>${esc(confirmLabel)}</button>
       </footer>
     </div>`;
@@ -93,13 +104,8 @@ function openModal({ title, bodyHtml, confirmLabel = '确认', danger = false, o
 
 /* ------------------------------ state ------------------------------ */
 
-const STEPS = [
-  { id: 'scan', n: 1, label: '扫描', hint: '只读枚举候选残留' },
-  { id: 'select', n: 2, label: '勾选', hint: '挑选要清理的对象' },
-  { id: 'plan', n: 3, label: '预演', hint: '复核动作，不写盘' },
-  { id: 'execute', n: 4, label: '执行', hint: '移入回收站或删除' },
-  { id: 'trash', n: 5, label: '回收站', hint: '查看与还原批次' },
-];
+const STEP_IDS = ['scan', 'select', 'plan', 'execute', 'trash'];
+const CIRCLE_KEYS = ['safe', 'review', 'protected', 'keep'];
 
 const state = {
   step: 'scan',
@@ -117,9 +123,12 @@ const state = {
   trash: null,
   openBatch: null,
   busy: null,
+  mode: 'trash',
 };
 
-const CIRCLE_CLASS = { safe: 'safe', review: 'review', protected: 'protected', keep: 'keep' };
+function stepMeta(id) {
+  return { id, n: STEP_IDS.indexOf(id) + 1, label: t(`step.${id}.label`), hint: t(`step.${id}.hint`) };
+}
 
 /* ------------------------------ selection helpers ------------------------------ */
 
@@ -129,6 +138,7 @@ function filteredUnits() {
   const f = state.filters;
   const search = f.search.trim().toLowerCase();
   let list = state.units.filter((u) => {
+    if (!selectable(u)) return false;
     if (f.circle !== 'all' && u.circle !== f.circle) return false;
     if (f.harness !== 'all' && u.harnessId !== f.harness) return false;
     if (f.kind !== 'all' && u.kind !== f.kind) return false;
@@ -182,21 +192,29 @@ function stepState(id) {
 }
 
 function renderSidebar() {
-  stepsEl.innerHTML = STEPS.map((s) => {
-    const st = stepState(s.id);
-    const cls = [s.id === state.step ? 'active' : '', st.done ? 'done' : '', st.enabled ? '' : 'disabled'].filter(Boolean).join(' ');
-    return `<li class="${cls}" data-step="${s.id}">
-      <span class="n">${st.done && s.id !== state.step ? '✓' : s.n}</span>
-      <span class="meta"><b>${esc(s.label)}</b><small>${esc(s.hint)}</small></span>
+  stepsEl.innerHTML = STEP_IDS.map((id) => {
+    const s = stepMeta(id);
+    const st = stepState(id);
+    const cls = [id === state.step ? 'active' : '', st.done ? 'done' : '', st.enabled ? '' : 'disabled'].filter(Boolean).join(' ');
+    return `<li class="${cls}" data-step="${id}" title="${esc(s.hint)}">
+      <span class="n">${st.done && id !== state.step ? '✓' : s.n}</span>
+      <span>${esc(s.label)}</span>
     </li>`;
   }).join('');
 
   if (!state.ui) { envEl.innerHTML = ''; return; }
   envEl.innerHTML = `
-    <div class="row"><span>平台</span><span>${esc(state.ui.platformLabel)}</span></div>
-    <div class="row"><span>版本</span><span>v${esc(state.ui.version)}</span></div>
-    <div class="row"><span>回收站</span><span class="mono">${esc(state.ui.trashRoot)}</span></div>
-    <div class="row"><span>Harness</span><span>${fmtNum(state.ui.harnesses.length)} 个</span></div>`;
+    <div class="row"><span>${esc(t('envPlatform'))}</span><span>${esc(state.ui.platformLabel)}</span></div>
+    <div class="row"><span>${esc(t('envVersion'))}</span><span>v${esc(state.ui.version)}</span></div>
+    <div class="row"><span>${esc(t('envHarnesses'))}</span><span>${esc(t('envHarnessCount', { n: state.ui.harnesses.length }))}</span></div>`;
+}
+
+function renderLocaleSwitch() {
+  brandSubEl.textContent = t('brandSub');
+  const labels = { 'zh-CN': '中文', 'en-US': 'EN' };
+  localeSwitchEl.innerHTML = I18N.supported.map((loc) => `
+    <button type="button" data-locale="${loc}" class="${loc === I18N.locale ? 'active' : ''}"
+      aria-pressed="${loc === I18N.locale}">${esc(labels[loc] || loc)}</button>`).join('');
 }
 
 function go(step) {
@@ -212,11 +230,11 @@ function go(step) {
 function renderTopActions() {
   const parts = [];
   if (state.scan) {
-    parts.push('<button class="btn sm" data-act="rescan">重新扫描</button>');
-    parts.push('<button class="btn sm" data-act="report">导出 HTML 报告</button>');
+    parts.push(`<button class="btn sm" data-act="rescan">${esc(t('actRescan'))}</button>`);
+    parts.push(`<button class="btn sm" data-act="report">${esc(t('actExport'))}</button>`);
   }
   if (state.step === 'select' && state.selection.size > 0) {
-    parts.push(`<button class="btn sm primary" data-act="to-plan">生成预演（${fmtNum(state.selection.size)}）</button>`);
+    parts.push(`<button class="btn sm primary" data-act="to-plan">${esc(t('actToPlan', { n: fmtNum(state.selection.size) }))}</button>`);
   }
   topActionsEl.innerHTML = parts.join('');
 }
@@ -256,25 +274,26 @@ function scanBody() {
 
 function overviewHtml() {
   const { summary, scan } = state.scan;
-  const t = summary.totals;
+  const tot = summary.totals;
   const c = summary.byCircle;
-  const order = ['safe', 'review', 'protected', 'keep'];
-  const total = t.totalBytes || 1;
-  const segs = order.map((key) => {
+  const total = tot.totalBytes || 1;
+
+  const segs = CIRCLE_KEYS.map((key) => {
     const bytes = c[key] ? c[key].bytes : 0;
     const pct = (bytes / total) * 100;
     if (pct <= 0) return '';
-    return `<span class="seg c-${key}" style="width:${pct.toFixed(3)}%" title="${esc(summary.circles[key].label)} ${fmtBytes(bytes)}"></span>`;
+    return `<span class="seg c-${key}" style="width:${pct.toFixed(3)}%" title="${esc(circleLabel(key))} ${fmtBytes(bytes)}"></span>`;
   }).join('');
-  const legend = order.map((key) => {
+
+  const legend = CIRCLE_KEYS.map((key) => {
     const bucket = c[key] || { count: 0, bytes: 0 };
     const pct = ((bucket.bytes / total) * 100).toFixed(1);
-    return `<li><span class="dot c-${key}"></span><b>${esc(summary.circles[key].label)}</b>
-      <span class="muted">${fmtBytes(bucket.bytes)} · ${fmtNum(bucket.count)} 个 · ${pct}%</span></li>`;
+    return `<li><span class="dot c-${key}"></span><b>${esc(circleLabel(key))}</b>
+      <span class="muted">${esc(t('scan.legend', { bytes: fmtBytes(bucket.bytes), n: fmtNum(bucket.count), pct }))}</span></li>`;
   }).join('');
 
   const harnessRows = summary.byHarness.map((row) => `<tr>
-    <td><span class="mono">${esc(row.harnessName)}</span>${row.deleteEnabled ? '' : '<span class="badge">仅报告</span>'}</td>
+    <td><span class="mono">${esc(row.harnessName)}</span>${row.deleteEnabled ? '' : `<span class="badge">${esc(t('tagReportOnly'))}</span>`}</td>
     <td class="num">${fmtNum(row.count)}</td>
     <td class="num">${fmtBytes(row.bytes)}</td>
     <td class="num pos">${fmtBytes(row.safeBytes)}</td>
@@ -286,31 +305,31 @@ function overviewHtml() {
 
   return `
     <div class="cards">
-      <div class="card"><div class="k">候选单元</div><div class="v">${fmtNum(t.unitCount)}</div></div>
-      <div class="card"><div class="k">扫描总体积</div><div class="v">${fmtBytes(t.totalBytes)}</div></div>
-      <div class="card"><div class="k">可回收总量</div><div class="v pos">${fmtBytes(t.reclaimableBytes)}</div></div>
-      <div class="card"><div class="k">安全圈</div><div class="v pos">${fmtBytes(c.safe.bytes)}</div></div>
-      <div class="card"><div class="k">待确认圈</div><div class="v warn">${fmtBytes(c.review.bytes)}</div></div>
-      <div class="card"><div class="k">永不清理</div><div class="v neg">${fmtBytes(c.protected.bytes)}</div></div>
+      <div class="card"><div class="k">${esc(t('scan.units'))}</div><div class="v">${fmtNum(tot.unitCount)}</div></div>
+      <div class="card"><div class="k">${esc(t('scan.total'))}</div><div class="v">${fmtBytes(tot.totalBytes)}</div></div>
+      <div class="card"><div class="k">${esc(t('scan.reclaimable'))}</div><div class="v pos">${fmtBytes(tot.reclaimableBytes)}</div></div>
+      <div class="card"><div class="k">${esc(t('circle.short.safe'))}</div><div class="v pos">${fmtBytes(c.safe.bytes)}</div></div>
+      <div class="card"><div class="k">${esc(t('circle.short.review'))}</div><div class="v warn">${fmtBytes(c.review.bytes)}</div></div>
+      <div class="card"><div class="k">${esc(t('circle.short.protected'))}</div><div class="v neg">${fmtBytes(c.protected.bytes)}</div></div>
     </div>
 
-    <h2 class="sec">圈层体积分布</h2>
-    <div class="bar" role="img" aria-label="圈层体积分布">${segs}</div>
+    <h2 class="sec">${esc(t('scan.circleDist'))}</h2>
+    <div class="bar" role="img" aria-label="${esc(t('scan.circleDist'))}">${segs}</div>
     <ul class="legend">${legend}</ul>
 
-    <h2 class="sec">按 Harness 汇总</h2>
+    <h2 class="sec">${esc(t('scan.byHarness'))}</h2>
     <div class="tableWrap"><table>
       <thead><tr>
-        <th>Harness</th><th class="num">单元</th><th class="num">合计</th>
-        <th class="num">安全圈</th><th class="num">待确认</th><th class="num">保护</th>
-        <th class="num">最旧</th><th class="num">最新</th>
+        <th>Harness</th><th class="num">${esc(t('scan.thUnits'))}</th><th class="num">${esc(t('scan.thTotal'))}</th>
+        <th class="num">${esc(t('scan.thSafe'))}</th><th class="num">${esc(t('scan.thReview'))}</th><th class="num">${esc(t('scan.thProtected'))}</th>
+        <th class="num">${esc(t('scan.thOldest'))}</th><th class="num">${esc(t('scan.thNewest'))}</th>
       </tr></thead>
-      <tbody>${harnessRows || '<tr><td colspan="8" class="muted">无数据</td></tr>'}</tbody>
+      <tbody>${harnessRows || `<tr><td colspan="8" class="muted">${esc(t('scan.noData'))}</td></tr>`}</tbody>
     </table></div>
 
     <div class="btn-row" style="margin-top:20px">
-      <button class="btn primary" data-act="to-select">去勾选（${fmtNum(t.unitCount)} 个候选）</button>
-      <span class="muted">扫描耗时 ${(scan.durationMs / 1000).toFixed(1)}s · 只读，未改动磁盘</span>
+      <button class="btn primary" data-act="to-select">${esc(t('scan.toSelect', { n: fmtNum(tot.unitCount) }))}</button>
+      <span class="muted">${esc(t('scan.footnote', { s: (scan.durationMs / 1000).toFixed(1) }))}</span>
     </div>`;
 }
 
@@ -323,59 +342,61 @@ function renderScan() {
     <label>
       <input type="checkbox" data-harness="${esc(h.id)}" ${c.harnessIds.includes(h.id) ? 'checked' : ''}>
       <span>${esc(h.name)}</span>
-      ${h.deleteEnabled ? '' : '<span class="tag">仅报告</span>'}
+      ${h.deleteEnabled ? '' : `<span class="tag">${esc(t('tagReportOnly'))}</span>`}
     </label>`).join('');
 
   const progress = state.job ? `
     <div class="panel" style="margin-top:16px">
       <div class="progress"><i id="progBar" style="width:${state.job.progress ? Math.round(((state.job.progress.index + 1) / state.job.progress.total) * 100) : 4}%"></i></div>
       <div class="progressLabel">
-        <span id="progText">${state.job.progress ? `正在扫描 ${esc(state.job.progress.harnessName)}（${state.job.progress.index + 1}/${state.job.progress.total}）` : '正在初始化扫描…'}</span>
+        <span id="progText">${state.job.progress
+          ? esc(t('scan.progress', { name: state.job.progress.harnessName, i: state.job.progress.index + 1, n: state.job.progress.total }))
+          : esc(t('scan.progressInit'))}</span>
         <span class="spinner dark"></span>
       </div>
     </div>` : '';
 
-  const overview = state.scan && !state.job ? `<h2 class="sec">扫描概览</h2>${overviewHtml()}` : '';
+  const overview = state.scan && !state.job ? `<h2 class="sec">${esc(t('scan.overview'))}</h2>${overviewHtml()}` : '';
 
   viewEl.innerHTML = `
     <div class="panel">
       <div class="form">
         <div class="field">
-          <label>TTL（天）</label>
-          <input type="number" min="0" step="1" id="f-ttl" value="${esc(c.globalTtlDays)}" placeholder="留空使用各 harness 默认值">
-          <span class="hint">超过该年龄的残留才进入候选；留空则按 harness 默认 TTL</span>
+          <label>${esc(t('scan.ttl'))}</label>
+          <input type="number" min="0" step="1" id="f-ttl" value="${esc(c.globalTtlDays)}" placeholder="${esc(t('scan.ttlPlaceholder'))}">
+          <span class="hint">${esc(t('scan.ttlHint'))}</span>
         </div>
         <div class="field">
-          <label>最小体积（MB）</label>
+          <label>${esc(t('scan.minSize'))}</label>
           <input type="number" min="0" step="1" id="f-size" value="${esc(c.minSizeMB)}">
-          <span class="hint">小于该体积的对象不进入可清理范围</span>
+          <span class="hint">${esc(t('scan.minSizeHint'))}</span>
         </div>
         <div class="field">
-          <label>最低评分</label>
+          <label>${esc(t('scan.minScore'))}</label>
           <input type="number" min="0" max="100" step="1" id="f-score" value="${esc(c.minScore)}">
-          <span class="hint">复合评分下限（0-100）</span>
+          <span class="hint">${esc(t('scan.minScoreHint'))}</span>
         </div>
         <div class="field">
-          <label>开关</label>
+          <label>${esc(t('scan.options'))}</label>
           <div style="display:flex;flex-direction:column;gap:8px;padding-top:2px">
-            <label class="checkline"><input type="checkbox" id="f-active" ${c.activeCheck ? 'checked' : ''}> 检测进程占用（推荐）</label>
-            <label class="checkline"><input type="checkbox" id="f-report" ${c.includeReportOnly ? 'checked' : ''}> 纳入仅报告的 harness</label>
+            <label class="checkline"><input type="checkbox" id="f-active" ${c.activeCheck ? 'checked' : ''}> ${esc(t('scan.activeCheck'))}</label>
+            <label class="checkline"><input type="checkbox" id="f-report" ${c.includeReportOnly ? 'checked' : ''}> ${esc(t('scan.reportOnly'))}</label>
           </div>
         </div>
       </div>
 
-      <h2 class="sec">扫描范围</h2>
+      <h2 class="sec">${esc(t('scan.scope'))}</h2>
       <div class="checkline" style="margin-bottom:8px">
-        <label class="checkline"><input type="checkbox" id="f-all-harness" ${allSelected ? 'checked' : ''}> 全选</label>
-        <span class="muted">${fmtNum(harnesses.length)} 个适用于当前平台的 harness</span>
+        <label class="checkline"><input type="checkbox" id="f-all-harness" ${allSelected ? 'checked' : ''}> ${esc(t('scan.selectAll'))}</label>
+        <span class="muted">${esc(t('scan.harnessCount', { n: fmtNum(harnesses.length) }))}</span>
       </div>
       <div class="harnessGrid">${harnessBoxes}</div>
 
       <div class="btn-row" style="margin-top:18px">
         <button class="btn primary" data-act="scan" ${state.job ? 'disabled' : ''}>
-          ${state.job ? '<span class="spinner"></span> 扫描中…' : '开始扫描'}
+          ${state.job ? `<span class="spinner"></span> ${esc(t('scan.running'))}` : esc(t('scan.start'))}
         </button>
-        <span class="muted">扫描为只读操作，不会改动任何文件</span>
+        <span class="muted">${esc(t('scan.readOnly'))}</span>
       </div>
     </div>
     ${progress}
@@ -385,9 +406,13 @@ function renderScan() {
 /* ------------------------------ select step ------------------------------ */
 
 function circleOptions() {
-  const circles = state.ui ? state.ui.circles : {};
-  const keys = ['safe', 'review', 'protected', 'keep'];
-  return keys.map((k) => `<option value="${k}" ${state.filters.circle === k ? 'selected' : ''}>${esc(circles[k] ? circles[k].label : k)}</option>`).join('');
+  // The selection table only lists actionable units, so the circle filter
+  // only offers the two cleanable circles.
+  return ['safe', 'review'].map((k) => `<option value="${k}" ${state.filters.circle === k ? 'selected' : ''}>${esc(circleLabel(k))}</option>`).join('');
+}
+
+function hiddenUnits() {
+  return state.units.filter((u) => !selectable(u));
 }
 
 function harnessFilterOptions() {
@@ -411,62 +436,65 @@ function renderSelect() {
   const rows = list.map((u) => {
     const can = selectable(u);
     const checked = state.selection.has(u.id);
-    const signals = `${u.orphan ? '<span class="pill orphan">孤儿</span>' : ''}${u.active ? '<span class="pill active">占用</span>' : ''}${!u.orphan && !u.active ? '<span class="muted">—</span>' : ''}`;
+    const signals = `${u.orphan ? `<span class="sig orphan">${esc(t('reason.orphan'))}</span>` : ''}${u.active ? `<span class="sig active">${esc(t('reason.in-use'))}</span>` : ''}`;
     return `<tr class="${checked ? 'selected' : ''}" data-id="${esc(u.id)}">
       <td class="cell-check"><input type="checkbox" data-select="${esc(u.id)}" ${checked ? 'checked' : ''} ${can ? '' : 'disabled'}></td>
-      <td><span class="mono">${esc(u.harnessName)}</span>${u.deleteEnabled ? '' : '<span class="badge">仅报告</span>'}</td>
+      <td><span class="mono">${esc(u.harnessName)}</span>${u.deleteEnabled ? '' : `<span class="badge">${esc(t('tagReportOnly'))}</span>`}</td>
       <td>${esc(u.kind)}</td>
       <td class="num">${fmtBytes(u.sizeBytes)}</td>
       <td class="num">${u.ageMs === null ? '—' : fmtAge(u.ageMs)}</td>
       <td class="num">${u.score.toFixed(1)}</td>
-      <td><span class="pill circle ${CIRCLE_CLASS[u.circle] || 'keep'}">${esc(u.circleReason || u.circle)}</span></td>
-      <td>${signals}</td>
+      <td><span class="circle-cell ${u.circle}"><span class="dot c-${u.circle}"></span>${esc(reasonLabel(u.circleReason) || circleLabel(u.circle))}</span></td>
+      <td>${signals || '<span class="muted">—</span>'}</td>
       <td class="path" title="${esc(u.path)}">${esc(u.displayPath)}</td>
     </tr>`;
   }).join('');
 
-  const allSelectable = list.filter(selectable);
-  const allChosen = allSelectable.length > 0 && allSelectable.every((u) => state.selection.has(u.id));
+  const actionable = state.units.filter(selectable);
+  const allChosen = actionable.length > 0 && actionable.every((u) => state.selection.has(u.id));
+  const hidden = hiddenUnits();
+  const hiddenBytes = hidden.reduce((sum, u) => sum + u.sizeBytes, 0);
 
   viewEl.innerHTML = `
     <div class="toolbar">
       <div class="group">
-        <div class="field"><label>圈层</label>
-          <select id="fl-circle"><option value="all">全部</option>${circleOptions()}</select></div>
+        <div class="field"><label>${esc(t('sel.circle'))}</label>
+          <select id="fl-circle"><option value="all">${esc(t('sel.all'))}</option>${circleOptions()}</select></div>
         <div class="field"><label>Harness</label>
-          <select id="fl-harness"><option value="all">全部</option>${harnessFilterOptions()}</select></div>
-        <div class="field"><label>类型</label>
-          <select id="fl-kind"><option value="all">全部</option>${kindOptions()}</select></div>
-        <div class="field"><label>最低评分</label>
+          <select id="fl-harness"><option value="all">${esc(t('sel.all'))}</option>${harnessFilterOptions()}</select></div>
+        <div class="field"><label>${esc(t('sel.type'))}</label>
+          <select id="fl-kind"><option value="all">${esc(t('sel.all'))}</option>${kindOptions()}</select></div>
+        <div class="field"><label>${esc(t('sel.minScore'))}</label>
           <input type="number" min="0" max="100" step="1" id="fl-score" value="${esc(state.filters.minScore)}"></div>
-        <div class="field"><label>搜索</label>
-          <input type="search" id="fl-search" value="${esc(state.filters.search)}" placeholder="路径或 harness"></div>
+        <div class="field"><label>${esc(t('sel.search'))}</label>
+          <input type="search" id="fl-search" value="${esc(state.filters.search)}" placeholder="${esc(t('sel.searchPlaceholder'))}"></div>
       </div>
       <div class="group">
-        <button class="btn sm" data-act="sel-safe">全选安全圈</button>
-        <button class="btn sm" data-act="sel-review">全选待确认</button>
-        <button class="btn sm" data-act="sel-visible">全选当前结果</button>
-        <button class="btn sm ghost" data-act="sel-clear">清空</button>
+        <button class="btn sm" data-act="sel-safe">${esc(t('sel.allSafe'))}</button>
+        <button class="btn sm" data-act="sel-review">${esc(t('sel.allReview'))}</button>
+        <button class="btn sm" data-act="sel-visible">${esc(t('sel.allVisible'))}</button>
+        <button class="btn sm ghost" data-act="sel-clear">${esc(t('sel.clear'))}</button>
       </div>
     </div>
 
     <div class="muted" style="margin-bottom:8px;font-size:12px">
-      显示 ${fmtNum(list.length)} / ${fmtNum(state.units.length)} 个单元 · 点击表头排序
+      ${esc(t('sel.shown', { shown: fmtNum(list.length), total: fmtNum(actionable.length) }))}
+      ${hidden.length ? ` · ${esc(t('sel.hidden', { n: fmtNum(hidden.length), bytes: fmtBytes(hiddenBytes) }))}` : ''}
     </div>
 
     <div class="tableWrap"><table>
       <thead><tr>
         <th class="cell-check"><input type="checkbox" id="fl-check-all" ${allChosen ? 'checked' : ''}></th>
         <th class="sortable" data-sort="harnessName">Harness${sortIndicator('harnessName')}</th>
-        <th class="sortable" data-sort="kind">类型${sortIndicator('kind')}</th>
-        <th class="num sortable" data-sort="sizeBytes">体积${sortIndicator('sizeBytes')}</th>
-        <th class="num sortable" data-sort="ageMs">年龄${sortIndicator('ageMs')}</th>
-        <th class="num sortable" data-sort="score">评分${sortIndicator('score')}</th>
-        <th class="sortable" data-sort="circle">圈层${sortIndicator('circle')}</th>
-        <th>信号</th>
-        <th>路径</th>
+        <th class="sortable" data-sort="kind">${esc(t('sel.thType'))}${sortIndicator('kind')}</th>
+        <th class="num sortable" data-sort="sizeBytes">${esc(t('sel.thSize'))}${sortIndicator('sizeBytes')}</th>
+        <th class="num sortable" data-sort="ageMs">${esc(t('sel.thAge'))}${sortIndicator('ageMs')}</th>
+        <th class="num sortable" data-sort="score">${esc(t('sel.thScore'))}${sortIndicator('score')}</th>
+        <th class="sortable" data-sort="circle">${esc(t('sel.thCircle'))}${sortIndicator('circle')}</th>
+        <th>${esc(t('sel.thType'))}</th>
+        <th>${esc(t('sel.thPath'))}</th>
       </tr></thead>
-      <tbody>${rows || '<tr><td colspan="9" class="muted" style="padding:24px;text-align:center">没有符合筛选条件的单元</td></tr>'}</tbody>
+      <tbody>${rows || `<tr><td colspan="9" class="muted" style="padding:24px;text-align:center">${esc(t('sel.empty'))}</td></tr>`}</tbody>
     </table></div>`;
 
   renderSelbar();
@@ -477,11 +505,11 @@ function renderSelbar() {
   const s = selectionSummary();
   selbarEl.innerHTML = `
     <div class="selbar">
-      <div class="info">已选 <b>${fmtNum(s.count)}</b> 个对象 · 合计 <b>${fmtBytes(s.bytes)}</b>
-        <span class="muted">（安全圈 ${fmtNum(s.safe)} · 待确认 ${fmtNum(s.review)}）</span></div>
+      <div class="info">${t('sel.selected', { n: `<b>${fmtNum(s.count)}</b>`, bytes: `<b>${fmtBytes(s.bytes)}</b>` })}
+        <span class="muted">${esc(t('sel.selectedCircles', { safe: fmtNum(s.safe), review: fmtNum(s.review) }))}</span></div>
       <div class="btn-row">
-        <button class="btn" data-act="sel-clear">清空</button>
-        <button class="btn primary" data-act="to-plan" ${s.count === 0 ? 'disabled' : ''}>生成预演 →</button>
+        <button class="btn" data-act="sel-clear">${esc(t('sel.clear'))}</button>
+        <button class="btn primary" data-act="to-plan" ${s.count === 0 ? 'disabled' : ''}>${esc(t('actToPlanShort'))}</button>
       </div>
     </div>`;
 }
@@ -504,7 +532,7 @@ function actionRows(actions, emptyText) {
 function renderPlan() {
   const plan = state.plan;
   const dry = state.dryExecution;
-  if (!plan) { viewEl.innerHTML = '<div class="empty">尚未生成预演，请先在「勾选」中选择对象。</div>'; return; }
+  if (!plan) { viewEl.innerHTML = `<div class="empty">${esc(t('plan.empty'))}</div>`; return; }
 
   const moved = dry ? dry.moved : plan.actions;
   const skipped = dry ? dry.skipped : [];
@@ -513,43 +541,40 @@ function renderPlan() {
     <td class="path">${esc(r.repo)}</td><td class="num">${fmtNum(r.worktrees)}</td></tr>`).join('');
 
   const skippedBlock = skipped.length > 0 ? `
-    <h2 class="sec">执行时被跳过的对象（${fmtNum(skipped.length)}）</h2>
-    <div class="note warn"><p>以下对象在复核阶段被安全约束拦下，不会被处理：</p>
-      <ul>${skipped.slice(0, 12).map((s) => `<li><span class="mono">${esc(s.path)}</span> — ${esc(s.reason)}</li>`).join('')}</ul>
-      ${skipped.length > 12 ? `<p class="muted">…还有 ${fmtNum(skipped.length - 12)} 个</p>` : ''}
+    <h2 class="sec">${esc(t('plan.skipped', { n: fmtNum(skipped.length) }))}</h2>
+    <div class="note warn"><p>${esc(t('plan.skippedNote'))}</p>
+      <ul>${skipped.slice(0, 12).map((s) => `<li><span class="mono">${esc(s.path)}</span> — ${esc(reasonLabel(s.reason) || s.reason)}</li>`).join('')}</ul>
+      ${skipped.length > 12 ? `<p class="muted">${esc(t('plan.more', { n: fmtNum(skipped.length - 12) }))}</p>` : ''}
     </div>` : '';
 
   viewEl.innerHTML = `
     <div class="cards">
-      <div class="card"><div class="k">待处理对象</div><div class="v">${fmtNum(plan.totals.actionCount)}</div></div>
-      <div class="card"><div class="k">预计释放</div><div class="v pos">${fmtBytes(plan.totals.actionBytes)}</div></div>
-      <div class="card"><div class="k">复核通过</div><div class="v">${fmtNum(moved.length)}</div></div>
-      <div class="card"><div class="k">复核跳过</div><div class="v ${skipped.length ? 'warn' : ''}">${fmtNum(skipped.length)}</div></div>
-      <div class="card"><div class="k">保护圈（未纳入）</div><div class="v neg">${fmtBytes(plan.skipped.protectedBytes)}</div></div>
+      <div class="card"><div class="k">${esc(t('plan.cardCount'))}</div><div class="v">${fmtNum(plan.totals.actionCount)}</div></div>
+      <div class="card"><div class="k">${esc(t('plan.cardFreed'))}</div><div class="v pos">${fmtBytes(plan.totals.actionBytes)}</div></div>
+      <div class="card"><div class="k">${esc(t('plan.cardVerified'))}</div><div class="v">${fmtNum(moved.length)}</div></div>
+      <div class="card"><div class="k">${esc(t('plan.cardSkipped'))}</div><div class="v ${skipped.length ? 'warn' : ''}">${fmtNum(skipped.length)}</div></div>
+      <div class="card"><div class="k">${esc(t('plan.cardProtected'))}</div><div class="v neg">${fmtBytes(plan.skipped.protectedBytes)}</div></div>
     </div>
 
-    <div class="note" style="margin-top:16px">
-      <p><b>这是预演结果，未改动磁盘。</b>预演已按与真实执行相同的规则复核每个对象（安全硬约束 + 进程占用），
-      因此「复核通过」的数量即为执行时真正会被处理的对象数。</p>
-    </div>
+    <div class="note" style="margin-top:16px"><p>${esc(t('plan.note'))}</p></div>
 
-    <h2 class="sec">复核通过 · 将被处理（${fmtNum(moved.length)}）</h2>
+    <h2 class="sec">${esc(t('plan.verified', { n: fmtNum(moved.length) }))}</h2>
     <div class="tableWrap"><table>
-      <thead><tr><th>Harness</th><th>类型</th><th class="num">体积</th><th class="num">年龄</th><th>路径</th></tr></thead>
-      <tbody>${actionRows(moved, '没有可处理的对象')}</tbody>
+      <thead><tr><th>Harness</th><th>${esc(t('sel.thType'))}</th><th class="num">${esc(t('plan.thSize'))}</th><th class="num">${esc(t('plan.thAge'))}</th><th>${esc(t('plan.thPath'))}</th></tr></thead>
+      <tbody>${actionRows(moved, t('plan.emptyActions'))}</tbody>
     </table></div>
 
     ${skippedBlock}
 
-    <h2 class="sec">连带动作 · git worktree prune（${fmtNum((plan.pruneRepos || []).length)} 个主仓库）</h2>
+    <h2 class="sec">${esc(t('plan.prune', { n: fmtNum((plan.pruneRepos || []).length) }))}</h2>
     <div class="tableWrap"><table>
-      <thead><tr><th>主仓库</th><th class="num">关联工作树</th></tr></thead>
-      <tbody>${pruneRows || '<tr><td colspan="2" class="muted" style="padding:20px;text-align:center">无需 prune</td></tr>'}</tbody>
+      <thead><tr><th>${esc(t('plan.thRepo'))}</th><th class="num">${esc(t('plan.thWorktrees'))}</th></tr></thead>
+      <tbody>${pruneRows || `<tr><td colspan="2" class="muted" style="padding:20px;text-align:center">${esc(t('plan.noPrune'))}</td></tr>`}</tbody>
     </table></div>
 
     <div class="btn-row" style="margin-top:20px">
-      <button class="btn primary" data-act="to-execute" ${moved.length === 0 ? 'disabled' : ''}>确认并执行 →</button>
-      <button class="btn" data-act="back-select">返回调整勾选</button>
+      <button class="btn primary" data-act="to-execute" ${moved.length === 0 ? 'disabled' : ''}>${esc(t('plan.toExecute'))}</button>
+      <button class="btn" data-act="back-select">${esc(t('plan.backSelect'))}</button>
     </div>`;
 }
 
@@ -558,7 +583,7 @@ function renderPlan() {
 function executeMode() { return state.mode || 'trash'; }
 
 function renderExecute() {
-  if (!state.plan) { viewEl.innerHTML = '<div class="empty">请先生成预演。</div>'; return; }
+  if (!state.plan) { viewEl.innerHTML = `<div class="empty">${esc(t('exec.empty'))}</div>`; return; }
 
   if (state.report && !state.report.dryRun) { renderExecuteResult(); return; }
 
@@ -568,44 +593,44 @@ function renderExecute() {
 
   viewEl.innerHTML = `
     <div class="panel">
-      <h2 class="sec" style="margin-top:0">执行方式</h2>
+      <h2 class="sec" style="margin-top:0">${esc(t('exec.method'))}</h2>
       <div class="form">
         <div class="field">
-          <label>处理方式</label>
+          <label>${esc(t('exec.mode'))}</label>
           <div style="display:flex;flex-direction:column;gap:8px;padding-top:2px">
-            <label class="checkline"><input type="radio" name="mode" value="trash" ${mode === 'trash' ? 'checked' : ''}> 移入回收站（推荐，可还原）</label>
-            <label class="checkline"><input type="radio" name="mode" value="direct" ${mode === 'direct' ? 'checked' : ''}> 直接删除（不可还原）</label>
+            <label class="checkline"><input type="radio" name="mode" value="trash" ${mode === 'trash' ? 'checked' : ''}> ${esc(t('exec.modeTrash'))}</label>
+            <label class="checkline"><input type="radio" name="mode" value="direct" ${mode === 'direct' ? 'checked' : ''}> ${esc(t('exec.modeDirect'))}</label>
           </div>
         </div>
         <div class="field">
-          <label>连带动作</label>
+          <label>${esc(t('exec.followup'))}</label>
           <div style="padding-top:2px">
-            <label class="checkline"><input type="checkbox" id="f-prune" checked> 对关联主仓库执行 git worktree prune</label>
+            <label class="checkline"><input type="checkbox" id="f-prune" checked> ${esc(t('exec.prune'))}</label>
           </div>
         </div>
       </div>
     </div>
 
     <div class="note ${mode === 'direct' ? 'danger' : ''}" style="margin-top:16px">
-      <p>即将处理 <b>${fmtNum(moved)}</b> 个对象，预计释放 <b>${fmtBytes(plan.totals.actionBytes)}</b>。</p>
+      <p>${t('exec.willProcess', { n: `<b>${fmtNum(moved)}</b>`, bytes: `<b>${fmtBytes(plan.totals.actionBytes)}</b>` })}</p>
       <ul>
-        <li>处理前会对每个对象再次复核安全约束与进程占用，命中保护圈的对象自动跳过。</li>
-        <li>${mode === 'trash' ? '对象将移入回收站，可在第 5 步「回收站」中还原。' : '直接删除不可还原，请确认已复核预演结果。'}</li>
+        <li>${esc(t('exec.verifyNote'))}</li>
+        <li>${esc(mode === 'trash' ? t('exec.trashNote') : t('exec.directNote'))}</li>
       </ul>
     </div>
 
     ${mode === 'direct' ? `
       <div class="panel" style="margin-top:16px">
         <div class="field">
-          <label>危险操作确认</label>
-          <input type="text" id="f-confirmtext" placeholder="输入 DELETE 以启用直接删除">
-          <span class="hint">直接删除不可恢复，必须输入大写 DELETE</span>
+          <label>${esc(t('exec.confirmLabel'))}</label>
+          <input type="text" id="f-confirmtext" placeholder="${esc(t('exec.confirmPlaceholder'))}">
+          <span class="hint">${esc(t('exec.confirmHint'))}</span>
         </div>
       </div>` : ''}
 
     <div class="btn-row" style="margin-top:20px">
-      <button class="btn ${mode === 'direct' ? 'danger' : 'primary'}" data-act="execute">${mode === 'direct' ? '直接删除' : '移入回收站'}</button>
-      <button class="btn" data-act="back-plan">返回预演</button>
+      <button class="btn ${mode === 'direct' ? 'danger' : 'primary'}" data-act="execute">${esc(mode === 'direct' ? t('exec.btnDirect') : t('exec.btnTrash'))}</button>
+      <button class="btn" data-act="back-plan">${esc(t('exec.backPlan'))}</button>
     </div>`;
 }
 
@@ -617,32 +642,32 @@ function renderExecuteResult() {
 
   viewEl.innerHTML = `
     <div class="cards">
-      <div class="card"><div class="k">已处理</div><div class="v pos">${fmtNum(r.moved)}</div></div>
-      <div class="card"><div class="k">释放空间</div><div class="v pos">${fmtBytes(r.freedBytes)}</div></div>
-      <div class="card"><div class="k">复核跳过</div><div class="v ${r.skipped ? 'warn' : ''}">${fmtNum(r.skipped)}</div></div>
-      <div class="card"><div class="k">失败</div><div class="v ${r.failed ? 'neg' : ''}">${fmtNum(r.failed)}</div></div>
-      <div class="card"><div class="k">prune 仓库</div><div class="v">${fmtNum(r.pruned)}</div></div>
+      <div class="card"><div class="k">${esc(t('exec.cardProcessed'))}</div><div class="v pos">${fmtNum(r.moved)}</div></div>
+      <div class="card"><div class="k">${esc(t('exec.cardFreed'))}</div><div class="v pos">${fmtBytes(r.freedBytes)}</div></div>
+      <div class="card"><div class="k">${esc(t('exec.cardSkipped'))}</div><div class="v ${r.skipped ? 'warn' : ''}">${fmtNum(r.skipped)}</div></div>
+      <div class="card"><div class="k">${esc(t('exec.cardFailed'))}</div><div class="v ${r.failed ? 'neg' : ''}">${fmtNum(r.failed)}</div></div>
+      <div class="card"><div class="k">${esc(t('exec.cardPruned'))}</div><div class="v">${fmtNum(r.pruned)}</div></div>
     </div>
 
     <div class="note ${failed.length ? 'warn' : ''}" style="margin-top:16px">
-      <p>${exec.dryRun ? '预演' : '执行'}完成，耗时 ${(exec.durationMs / 1000).toFixed(1)}s。
-      ${r.batchId ? `批次 <span class="mono">${esc(r.batchId)}</span> 已写入回收站，可随时还原。` : ''}</p>
+      <p>${t('exec.finishNote', { label: esc(exec.dryRun ? t('exec.labelDry') : t('exec.labelReal')), s: (exec.durationMs / 1000).toFixed(1) })}
+      ${r.batchId ? esc(t('exec.batchNote', { id: esc(r.batchId) })) : ''}</p>
     </div>
 
     ${failed.length ? `
-      <h2 class="sec">失败明细</h2>
-      <div class="note danger"><ul>${failed.map((f) => `<li><span class="mono">${esc(f.path)}</span> — ${esc(f.reason)}</li>`).join('')}</ul></div>` : ''}
+      <h2 class="sec">${esc(t('exec.failedTitle'))}</h2>
+      <div class="note danger"><ul>${failed.map((f) => `<li><span class="mono">${esc(f.path)}</span> — ${esc(reasonLabel(f.reason) || f.reason)}</li>`).join('')}</ul></div>` : ''}
 
     ${pruned.length ? `
-      <h2 class="sec">prune 结果</h2>
+      <h2 class="sec">${esc(t('exec.pruneTitle'))}</h2>
       <div class="tableWrap"><table>
-        <thead><tr><th>主仓库</th><th>结果</th></tr></thead>
-        <tbody>${pruned.map((p) => `<tr><td class="path">${esc(p.repo.repo || p.repo)}</td><td>${p.ok ? '<span class="pos">成功</span>' : `<span class="warn">${esc(p.output || '失败')}</span>`}</td></tr>`).join('')}</tbody>
+        <thead><tr><th>${esc(t('plan.thRepo'))}</th><th>${esc(t('exec.thResult'))}</th></tr></thead>
+        <tbody>${pruned.map((p) => `<tr><td class="path">${esc(p.repo.repo || p.repo)}</td><td>${p.ok ? `<span class="pos">${esc(t('exec.ok'))}</span>` : `<span class="warn">${esc(p.output || t('exec.failed'))}</span>`}</td></tr>`).join('')}</tbody>
       </table></div>` : ''}
 
     <div class="btn-row" style="margin-top:20px">
-      <button class="btn primary" data-act="to-trash">前往回收站</button>
-      <button class="btn" data-act="rescan">重新扫描</button>
+      <button class="btn primary" data-act="to-trash">${esc(t('exec.toTrash'))}</button>
+      <button class="btn" data-act="rescan">${esc(t('actRescan'))}</button>
     </div>`;
 }
 
@@ -656,9 +681,9 @@ async function refreshTrash() {
 }
 
 function batchEntriesHtml(manifest) {
-  if (!manifest || !manifest.entries) return '<div class="muted">无条目</div>';
-  return `<div class="tableWrap" style="max-height:40vh;margin-top:12px"><table>
-    <thead><tr><th class="num">体积</th><th>原始路径</th></tr></thead>
+  if (!manifest || !manifest.entries) return `<div class="muted">${esc(t('trash.noEntries'))}</div>`;
+  return `<div class="tableWrap" style="max-height:40vh"><table>
+    <thead><tr><th class="num">${esc(t('trash.thSize'))}</th><th>${esc(t('trash.thPath'))}</th></tr></thead>
     <tbody>${manifest.entries.map((e) => `<tr>
       <td class="num">${fmtBytes(e.sizeBytes)}</td>
       <td class="path" title="${esc(e.originalPath)}">${esc(e.originalPath)}</td>
@@ -667,39 +692,39 @@ function batchEntriesHtml(manifest) {
 }
 
 function renderTrash() {
-  const t = state.trash;
-  if (!t) { viewEl.innerHTML = '<div class="empty">正在读取回收站…</div>'; return; }
+  const tr = state.trash;
+  if (!tr) { viewEl.innerHTML = `<div class="empty">${esc(t('trash.loading'))}</div>`; return; }
 
-  const batches = t.batches.map((b) => `
+  const batches = tr.batches.map((b) => `
     <details class="batch" data-batch="${esc(b.id)}">
       <summary>
         <span><span class="mono">${esc(b.id)}</span>
           ${b.label ? `<span class="badge">${esc(b.label)}</span>` : ''}</span>
         <span class="muted">${b.createdAt ? fmtDate(b.createdAt) : '—'} ·
-          ${b.entries === null ? '—' : `${fmtNum(b.entries)} 条`} ·
+          ${b.entries === null ? '—' : esc(t('trash.entries', { n: fmtNum(b.entries) }))} ·
           ${b.freedBytes === null ? '—' : fmtBytes(b.freedBytes)}</span>
       </summary>
       <div class="batchBody">
-        <div id="batch-body-${esc(b.id)}" class="muted">展开以读取清单…</div>
+        <div id="batch-body-${esc(b.id)}" class="muted">${esc(t('trash.expand'))}</div>
         <div class="btn-row" style="margin-top:12px">
-          <button class="btn sm" data-act="restore-dry" data-batch="${esc(b.id)}">还原预演</button>
-          <button class="btn sm primary" data-act="restore" data-batch="${esc(b.id)}">还原此批次</button>
+          <button class="btn sm" data-act="restore-dry" data-batch="${esc(b.id)}">${esc(t('trash.restoreDry'))}</button>
+          <button class="btn sm primary" data-act="restore" data-batch="${esc(b.id)}">${esc(t('trash.restore'))}</button>
         </div>
       </div>
     </details>`).join('');
 
   viewEl.innerHTML = `
     <div class="cards">
-      <div class="card"><div class="k">批次</div><div class="v">${fmtNum(t.batchCount)}</div></div>
-      <div class="card"><div class="k">累计释放</div><div class="v pos">${fmtBytes(t.freedBytes)}</div></div>
+      <div class="card"><div class="k">${esc(t('trash.cardBatches'))}</div><div class="v">${fmtNum(tr.batchCount)}</div></div>
+      <div class="card"><div class="k">${esc(t('trash.cardFreed'))}</div><div class="v pos">${fmtBytes(tr.freedBytes)}</div></div>
     </div>
 
-    <h2 class="sec">批次列表</h2>
-    ${batches || '<div class="empty">回收站为空。执行清理后，被移入的对象会出现在这里。</div>'}
+    <h2 class="sec">${esc(t('trash.list'))}</h2>
+    ${batches || `<div class="empty">${esc(t('trash.empty'))}</div>`}
 
-    ${t.batchCount > 0 ? `
+    ${tr.batchCount > 0 ? `
       <div class="btn-row" style="margin-top:20px">
-        <button class="btn danger" data-act="empty">清空回收站（不可还原）</button>
+        <button class="btn danger" data-act="empty">${esc(t('trash.emptyTrash'))}</button>
       </div>` : ''}`;
 }
 
@@ -728,12 +753,12 @@ async function pollJob(id) {
         return;
       }
       state.job = null;
-      if (job.state === 'error') { toast(`扫描失败：${job.error}`, 'err'); render(); return; }
+      if (job.state === 'error') { toast(t('scan.failed', { err: job.error }), 'err'); render(); return; }
       state.scan = job.result;
       state.units = job.result.units;
       state.selection = new Set();
       state.plan = null; state.dryExecution = null; state.execution = null; state.report = null;
-      toast(`扫描完成：${fmtNum(state.units.length)} 个候选单元`, 'ok');
+      toast(t('scan.done', { n: fmtNum(state.units.length) }), 'ok');
       state.step = 'select';
       render();
     } catch (err) {
@@ -747,7 +772,7 @@ async function pollJob(id) {
 
 async function goPlan() {
   const ids = [...state.selection];
-  if (ids.length === 0) { toast('请先勾选要处理的对象', 'err'); return; }
+  if (ids.length === 0) { toast(t('sel.selectFirst'), 'err'); return; }
   state.busy = 'plan';
   try {
     const res = await api('/api/execute', { method: 'POST', body: { actionIds: ids, dryRun: true } });
@@ -766,7 +791,7 @@ async function doExecute() {
   const prune = document.getElementById('f-prune') ? document.getElementById('f-prune').checked : true;
   const confirmText = document.getElementById('f-confirmtext') ? document.getElementById('f-confirmtext').value.trim() : '';
 
-  if (directDelete && confirmText !== 'DELETE') { toast('请输入 DELETE 以确认直接删除', 'err'); return; }
+  if (directDelete && confirmText !== 'DELETE') { toast(t('exec.confirmToast'), 'err'); return; }
 
   const body = { actionIds: ids, dryRun: false, directDelete, prune, confirm: true };
   if (directDelete) body.confirmText = confirmText;
@@ -778,7 +803,9 @@ async function doExecute() {
       state.execution = res.execution;
       state.report = res.report;
       state.plan = res.plan;
-      toast(directDelete ? `已删除 ${fmtNum(res.report.moved)} 个对象` : `已移入回收站 ${fmtNum(res.report.moved)} 个对象`, 'ok');
+      toast(directDelete
+        ? t('exec.deletedToast', { n: fmtNum(res.report.moved) })
+        : t('exec.movedToast', { n: fmtNum(res.report.moved) }), 'ok');
       state.selection = new Set();
       render();
       refreshTrash();
@@ -787,10 +814,10 @@ async function doExecute() {
 
   if (directDelete) {
     openModal({
-      title: '确认直接删除',
-      bodyHtml: `<p>将<b>不可还原地</b>删除 ${fmtNum(state.plan.totals.actionCount)} 个对象，预计释放 ${fmtBytes(state.plan.totals.actionBytes)}。</p>
-        <p class="muted" style="margin-top:8px">该操作无法通过回收站恢复。</p>`,
-      confirmLabel: '直接删除',
+      title: t('exec.modalTitle'),
+      bodyHtml: `<p>${t('exec.modalBody', { n: fmtNum(state.plan.totals.actionCount), bytes: fmtBytes(state.plan.totals.actionBytes) })}</p>
+        <p class="muted" style="margin-top:8px">${esc(t('exec.modalSub'))}</p>`,
+      confirmLabel: t('exec.btnDirect'),
       danger: true,
       onConfirm: run,
     });
@@ -804,37 +831,38 @@ async function restoreBatch(batchId, dryRun) {
     try {
       const res = await api('/api/trash/restore', { method: 'POST', body: { batchId, dryRun, confirm: true } });
       const msg = dryRun
-        ? `还原预演：可还原 ${fmtNum(res.restored.length)} · 冲突 ${fmtNum(res.conflicts.length)} · 缺失 ${fmtNum(res.missing.length)}`
-        : `已还原 ${fmtNum(res.restored.length)} 个对象${res.conflicts.length ? `，${fmtNum(res.conflicts.length)} 个目标已存在被跳过` : ''}`;
+        ? t('trash.restoreDryToast', { n: fmtNum(res.restored.length), c: fmtNum(res.conflicts.length), m: fmtNum(res.missing.length) })
+        : t('trash.restoreToast', { n: fmtNum(res.restored.length) })
+          + (res.conflicts.length ? t('trash.restoreToastConflicts', { c: fmtNum(res.conflicts.length) }) : '');
       toast(msg, dryRun ? '' : 'ok');
       if (!dryRun) refreshTrash();
     } catch (err) { toast(err.message, 'err'); }
   };
   if (dryRun) { await doIt(); return; }
   openModal({
-    title: '确认还原批次',
-    bodyHtml: `<p>将把批次 <span class="mono">${esc(batchId)}</span> 中的对象还原回原始路径。</p>
-      <p class="muted" style="margin-top:8px">若原始路径已存在同名对象，将跳过该项以避免覆盖。</p>`,
-    confirmLabel: '还原',
+    title: t('trash.restoreModalTitle'),
+    bodyHtml: `<p>${t('trash.restoreModalBody', { id: `<span class="mono">${esc(batchId)}</span>` })}</p>
+      <p class="muted" style="margin-top:8px">${esc(t('trash.restoreModalSub'))}</p>`,
+    confirmLabel: t('trash.restoreBtn'),
     onConfirm: doIt,
   });
 }
 
 function emptyTrash() {
   openModal({
-    title: '清空回收站',
-    bodyHtml: `<p>将<b>永久删除</b>回收站中的全部批次，此操作不可还原。</p>
+    title: t('trash.emptyModalTitle'),
+    bodyHtml: `<p>${t('trash.emptyModalBody')}</p>
       <div class="field" style="margin-top:12px">
-        <label>仅清空超过 N 天的批次（留空表示全部）</label>
-        <input type="number" min="0" step="1" id="f-keepdays" placeholder="例如 30">
+        <label>${esc(t('trash.keepDays'))}</label>
+        <input type="number" min="0" step="1" id="f-keepdays" placeholder="${esc(t('trash.keepDaysPlaceholder'))}">
       </div>`,
-    confirmLabel: '清空',
+    confirmLabel: t('trash.emptyBtn'),
     danger: true,
     onConfirm: async () => {
       const raw = document.getElementById('f-keepdays');
       const days = raw && raw.value.trim() !== '' ? Number(raw.value) : 0;
       const res = await api('/api/trash/empty', { method: 'POST', body: { confirm: true, olderThanDays: Number.isFinite(days) ? days : 0 } });
-      toast(`已清空 ${fmtNum(res.removed.length)} 个批次`, 'ok');
+      toast(t('trash.emptiedToast', { n: fmtNum(res.removed.length) }), 'ok');
       refreshTrash();
     },
   });
@@ -851,7 +879,7 @@ async function downloadReport() {
     a.download = 'agent-sweep-report.html';
     a.click();
     URL.revokeObjectURL(url);
-    toast('报告已导出', 'ok');
+    toast(t('reportExported'), 'ok');
   } catch (err) { toast(err.message, 'err'); }
 }
 
@@ -870,11 +898,12 @@ function applySelection(ids, mode) {
 /* ------------------------------ render root ------------------------------ */
 
 function render() {
+  renderLocaleSwitch();
   renderSidebar();
   renderTopActions();
-  const step = STEPS.find((s) => s.id === state.step);
-  titleEl.textContent = step ? step.label : '';
-  subEl.textContent = step ? step.hint : '';
+  const step = stepMeta(state.step);
+  titleEl.textContent = step.label;
+  subEl.textContent = step.hint;
 
   if (state.step === 'scan') { selbarEl.innerHTML = ''; renderScan(); }
   else if (state.step === 'select') renderSelect();
@@ -884,6 +913,11 @@ function render() {
 }
 
 /* ------------------------------ events ------------------------------ */
+
+localeSwitchEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-locale]');
+  if (btn) I18N.setLocale(btn.dataset.locale);
+});
 
 stepsEl.addEventListener('click', (e) => {
   const li = e.target.closest('[data-step]');
@@ -945,35 +979,35 @@ viewEl.addEventListener('click', (e) => {
 });
 
 viewEl.addEventListener('change', (e) => {
-  const t = e.target;
-  if (t.matches('[data-select]')) {
-    const id = t.dataset.select;
-    if (t.checked) state.selection.add(id); else state.selection.delete(id);
-    const row = t.closest('tr');
-    if (row) row.classList.toggle('selected', t.checked);
+  const el = e.target;
+  if (el.matches('[data-select]')) {
+    const id = el.dataset.select;
+    if (el.checked) state.selection.add(id); else state.selection.delete(id);
+    const row = el.closest('tr');
+    if (row) row.classList.toggle('selected', el.checked);
     renderSelbar();
     renderSidebar();
     renderTopActions();
     return;
   }
-  if (t.id === 'fl-circle') { state.filters.circle = t.value; renderSelect(); }
-  else if (t.id === 'fl-harness') { state.filters.harness = t.value; renderSelect(); }
-  else if (t.id === 'fl-kind') { state.filters.kind = t.value; renderSelect(); }
-  else if (t.id === 'fl-score') { state.filters.minScore = Number(t.value) || 0; renderSelect(); }
-  else if (t.id === 'f-ttl') { state.config.globalTtlDays = t.value; }
-  else if (t.id === 'f-size') { state.config.minSizeMB = t.value; }
-  else if (t.id === 'f-score') { state.config.minScore = t.value; }
-  else if (t.id === 'f-active') { state.config.activeCheck = t.checked; }
-  else if (t.id === 'f-report') { state.config.includeReportOnly = t.checked; }
-  else if (t.id === 'f-all-harness') {
-    state.config.harnessIds = t.checked ? harnessOptions().map((h) => h.id) : [];
+  if (el.id === 'fl-circle') { state.filters.circle = el.value; renderSelect(); }
+  else if (el.id === 'fl-harness') { state.filters.harness = el.value; renderSelect(); }
+  else if (el.id === 'fl-kind') { state.filters.kind = el.value; renderSelect(); }
+  else if (el.id === 'fl-score') { state.filters.minScore = Number(el.value) || 0; renderSelect(); }
+  else if (el.id === 'f-ttl') { state.config.globalTtlDays = el.value; }
+  else if (el.id === 'f-size') { state.config.minSizeMB = el.value; }
+  else if (el.id === 'f-score') { state.config.minScore = el.value; }
+  else if (el.id === 'f-active') { state.config.activeCheck = el.checked; }
+  else if (el.id === 'f-report') { state.config.includeReportOnly = el.checked; }
+  else if (el.id === 'f-all-harness') {
+    state.config.harnessIds = el.checked ? harnessOptions().map((h) => h.id) : [];
     renderScan();
-  } else if (t.dataset && t.dataset.harness) {
-    const id = t.dataset.harness;
-    if (t.checked) { if (!state.config.harnessIds.includes(id)) state.config.harnessIds.push(id); }
+  } else if (el.dataset && el.dataset.harness) {
+    const id = el.dataset.harness;
+    if (el.checked) { if (!state.config.harnessIds.includes(id)) state.config.harnessIds.push(id); }
     else state.config.harnessIds = state.config.harnessIds.filter((x) => x !== id);
-  } else if (t.name === 'mode') {
-    state.mode = t.value;
+  } else if (el.name === 'mode') {
+    state.mode = el.value;
     renderExecute();
   }
 });
@@ -1003,6 +1037,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeModal();
 });
 
+I18N.onChange(() => render());
+
 /* ------------------------------ init ------------------------------ */
 
 async function init() {
@@ -1011,7 +1047,7 @@ async function init() {
     state.config = defaultConfig();
     state.mode = 'trash';
   } catch (err) {
-    viewEl.innerHTML = `<div class="note danger">初始化失败：${esc(err.message)}</div>`;
+    viewEl.innerHTML = `<div class="note danger">${esc(t('initFailed', { err: err.message }))}</div>`;
     return;
   }
   render();

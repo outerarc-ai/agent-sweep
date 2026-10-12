@@ -94,6 +94,13 @@ test('web ui serves the shell and enforces the session token', async () => {
     assert.match(shell.text, /agent-sweep/);
     assert.ok(!shell.text.includes('__AGENT_SWEEP_BOOTSTRAP__'), 'bootstrap placeholder must be replaced');
     assert.ok(shell.text.includes(token), 'session token must be injected into the page');
+    assert.match(shell.text, /\/i18n\.js/, 'shell must load the i18n runtime');
+
+    const i18n = await request('/i18n.js');
+    assert.equal(i18n.status, 200);
+    assert.match(i18n.headers.get('content-type') || '', /javascript/);
+    assert.match(i18n.text, /zh-CN/);
+    assert.match(i18n.text, /en-US/);
 
     const anonymous = await request('/api/state');
     assert.equal(anonymous.status, 403);

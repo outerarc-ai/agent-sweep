@@ -62,6 +62,38 @@ agent-sweep trash list
 agent-sweep restore 20261012-114530-9qmh
 ```
 
+## 实际效果
+
+下面是一次真实环境（macOS，长期运行多个 AI 编程 Agent 的开发机）的 `scan` 输出摘录，全程只读、耗时约 7 秒：
+
+```console
+扫描概览
+  平台 macOS · harness 8 个 · 候选单元 430 个 · 合计 8.90 GB
+  可回收 2.33 GB（安全圈 1.98 GB · 待确认圈 359 MB）· 保护 770 MB
+
+Harness                单元     合计   安全圈  待确认     保护   最旧  最新
+─────────────────────  ────  ───────  ───────  ──────  ───────  ─────  ────
+Trae / Trae CN / SOLO   396  8.90 GB  1.98 GB  359 MB   770 MB  8.3mo    1m
+Copilot CLI (仅报告)     33  19.2 KB      0 B     0 B  19.2 KB    67d    2h
+Claude Code               1  50 B       0 B     0 B      0 B    41d   41d
+
+体积优先候选 Top 15（节选）
+圈层              Harness                类型         体积   年龄  孤儿  路径
+────────────────  ─────────────────────  ──────────  ─────  ─────  ────  ───────────────────────────────────────────
+[1] 可安全清理    Trae / Trae CN / SOLO  cache        111 MB   76d    —    ~/Library/Application Support/Trae CN/CachedD…
+[1] 可安全清理    Trae / Trae CN / SOLO  worktree     229 MB   31d  孤儿  ~/.trae-cn/worktrees/air/jaeger-otlp-setup-ra…
+[1] 可安全清理    Trae / Trae CN / SOLO  cache         90.3 MB  3.2mo  —    ~/Library/Application Support/Trae CN/CachedD…
+[2] 需确认后清理  Trae / Trae CN / SOLO  session-store  14.9 MB  3.1mo  —   ~/.trae-cn/work/6a50aa768f0da1f0e0e4a6f1
+```
+
+一眼能看清三件事：**总量**（430 个残留对象、8.90 GB）、**可回收量**（2.33 GB，其中 1.98 GB 可安全直接清理）、**被保护量**（770 MB 的记忆 / 凭据 / 活跃会话，任何参数都动不了）。孤儿 worktree（宿主项目已删除）与陈旧缓存会被自动标出。
+
+同一份数据也可以：
+
+- `agent-sweep scan --html report.html` — 生成自包含 HTML 报告分享
+- `agent-sweep ui --open` — 在浏览器里勾选、预演、执行（下节）
+- `agent-sweep clean --include-review --yes` — 执行清理，回收空间进入回收站可还原
+
 ## 本地 Web UI
 
 不想记命令时，用本地 Web UI 走完整流程：
@@ -73,10 +105,12 @@ agent-sweep ui --open
 浏览器打开 `http://127.0.0.1:7317/`，界面按五步组织，与 CLI 共用同一条流水线：
 
 1. **扫描** — 勾选 harness、设定 TTL / 最小体积 / 最低评分，只读枚举候选。
-2. **勾选** — 按圈层、harness、类型、评分与关键字筛选，逐项挑选要处理的对象。
+2. **勾选** — 按圈层、harness、类型、评分与关键字筛选，逐项挑选要处理的对象；「永不清理」圈层与仅报告目标不出现在此列表中（数量与体积以提示行汇总展示）。
 3. **预演** — 用与真实执行相同的规则复检每个对象，展示将被处理与被拦下的明细，不写盘。
 4. **执行** — 选择「移入回收站」或「直接删除」（后者需输入 `DELETE` 二次确认），执行后展示释放量与 prune 结果。
 5. **回收站** — 查看批次清单、还原预演与还原。
+
+界面支持**中英双语**（中文 / English），侧边栏一键切换，选择会记入 `localStorage`，首次访问按浏览器语言自动判定。所有文案（含圈层、判定原因等后端机器码）都在前端本地化，无外部依赖。
 
 安全边界与 CLI 完全一致，并额外加固：
 

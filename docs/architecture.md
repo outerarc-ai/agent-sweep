@@ -26,7 +26,7 @@ agent-sweep/
 │   ├── web/                  # 本地 Web UI（零依赖）
 │   │   ├── service.js        # 复用 createContext 的纯业务函数（扫描/计划/执行/回收站）
 │   │   ├── server.js         # node:http 服务、会话令牌、Origin 校验、静态资源
-│   │   └── public/           # 前端 SPA（index.html / styles.css / app.js）
+│   │   └── public/           # 前端 SPA（index.html / styles.css / i18n.js / app.js）
 │   ├── core/
 │   │   ├── registry.js       # 注册表加载、校验、别名解析、目标路径展开
 │   │   ├── harnesses/        # 8 份 harness 声明（每文件一个）
@@ -101,7 +101,7 @@ agent-sweep/
 
 - **服务层**（`web/server.js`）：仅监听 `127.0.0.1`（除非显式 `--host`）；启动生成会话令牌，所有 API 必须携带；校验 `Origin` 拒绝跨站；静态资源做路径穿越防护。
 - **业务层**（`web/service.js`）：`runScan` / `planSelection` / `runExecution` / `listTrash` / `restoreBatch` 等纯函数，输入输出均为可序列化结构。
-- **前端**（`web/public/`）：无构建步骤的 SPA，与服务端同构地渲染圈层、评分与明细。
+- **前端**（`web/public/`）：无构建步骤的 SPA，与服务端同构地渲染圈层、评分与明细。`i18n.js` 提供 zh-CN / en-US 词表与运行时（`t()` 插值、locale 感知的数字/日期格式化），切换语言写入 `localStorage` 并触发全量重渲染；圈层与判定原因等后端机器码在前端映射为本地化文案。
 
 安全不变量与 CLI 一致，并额外加固：**服务端永不信任前端提交的路径**——执行时按动作 id 在服务端重建计划并再次复核硬约束与进程占用；直接删除需请求体携带 `confirmText: "DELETE"`，与界面输入确认双重把关。
 
