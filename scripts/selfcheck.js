@@ -101,9 +101,23 @@ async function main() {
     check('含 memory 的会话目录落入保护圈', protectedDir && protectedDir.circle === CIRCLES.PROTECTED, protectedDir ? protectedDir.protectedReason : 'missing');
     check('进程占用单元落入保护圈', activeUnit && activeUnit.active === true && activeUnit.circle === CIRCLES.PROTECTED, activeUnit ? activeUnit.circleReason : 'missing');
 
-    check('安全圈计数正确', summary.byCircle.safe.count === 2, String(summary.byCircle.safe.count));
-    check('待确认圈计数正确', summary.byCircle.review.count === 3, String(summary.byCircle.review.count));
+    // encoded-cwd orphan probing rebuilds POSIX paths, so it is unavailable on
+    // Windows. There the encoded session directory cannot be proven orphan and
+    // is held back in the review circle instead of being auto-cleaned — the safe
+    // outcome, not a regression.
+    const windows = process.platform === 'win32';
+    const expectedSafe = windows ? 1 : 2;
+    const expectedReview = windows ? 4 : 3;
+
+    check('安全圈计数正确', summary.byCircle.safe.count === expectedSafe, `${summary.byCircle.safe.count} / 期望 ${expectedSafe}`);
+    check('待确认圈计数正确', summary.byCircle.review.count === expectedReview, `${summary.byCircle.review.count} / 期望 ${expectedReview}`);
     check('保护圈计数正确', summary.byCircle.protected.count === 2, String(summary.byCircle.protected.count));
+    const unresolvedHost = byRel('-no-such-host-zzz');
+    check(
+      '无法判定宿主项目的会话按平台降级',
+      Boolean(unresolvedHost) && unresolvedHost.circle === (windows ? CIRCLES.REVIEW : CIRCLES.SAFE),
+      unresolvedHost ? unresolvedHost.circle : 'missing',
+    );
 
     const plan = buildPlan(units, {
       summary,
