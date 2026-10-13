@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- English `README.md` as the primary readme; the Chinese readme moves to
+  `README.zh-CN.md` with a language switcher in both.
+- CodeQL workflow (security-and-quality queries, weekly schedule).
+- `npm run pack:check` and a CI job that verifies the published tarball
+  contents and smoke-tests the packed CLI.
+- Release guards: the tag must match `package.json` and `CHANGELOG.md` must
+  have a section for the version; pre-release tags publish as pre-releases.
+- `publishConfig` (public access, provenance) and a `prepublishOnly` gate.
+- Node 24 in the CI matrix; CI concurrency and job timeouts.
+- Maintainer release steps and Conventional Commits guidance in `CONTRIBUTING.md`.
 - Registry-driven harness descriptors for 8 harnesses: Claude Code, Codex CLI,
   Cursor, Windsurf/Devin, Trae/Trae CN/SOLO, Copilot CLI, Aider, Goose/OpenCode.
 - Read-only scanner and compound residue analyzer (leaf mtime age + orphan +
@@ -37,6 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repository, and an `author` field was added.
 
 ### Fixed
+- Piping CLI output into a command that closes early (`agent-sweep scan | head`)
+  no longer crashes with an unhandled `EPIPE` error.
+- `SECURITY.md` pointed reporters at a maintainer email that does not exist;
+  it now links directly to private vulnerability reporting.
+- The bug report template linked `SECURITY.md` with a broken relative URL and
+  did not list the `ui` command.
 - Claude Code sessions are no longer misclassified as orphans (and auto-cleaned
   in the safe circle) when the project path contains `_`, `.`, spaces or other
   non-alphanumeric characters. Claude Code encodes every such character as `-`,

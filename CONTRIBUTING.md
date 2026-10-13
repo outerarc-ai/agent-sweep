@@ -26,9 +26,23 @@ cd agent-sweep
 npm test          # Node built-in test runner
 npm run lint      # dependency-free static checks
 npm run check     # end-to-end self check on a synthetic fixture home
+npm run pack:check  # what `npm publish` would ship
 ```
 
-All three commands must pass before a pull request is ready.
+The first three commands must pass before a pull request is ready. CI runs
+them on macOS, Linux and Windows across every supported Node major, plus
+CodeQL and a smoke test of the packed CLI.
+
+## Releasing (maintainers)
+
+1. Move the `## [Unreleased]` entries in `CHANGELOG.md` under a new
+   `## [x.y.z] - YYYY-MM-DD` heading.
+2. Bump `version` in `package.json` (`npm version x.y.z --no-git-tag-version`).
+3. Merge to `main`, then push a matching tag: `git tag vx.y.z && git push origin vx.y.z`.
+
+The release workflow refuses to publish if the tag does not match
+`package.json` or the changelog has no section for the version. It publishes
+to npm with provenance and creates the GitHub release.
 
 ## Adding a harness
 
@@ -59,7 +73,10 @@ reference.
 ## Commit and PR conventions
 
 - One logical change per pull request.
-- Commit messages follow the imperative mood (`add windsurf orphan probe`).
+- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
+  in the imperative mood, e.g. `fix(scanner): stop misclassifying live sessions`
+  or `feat(harness): add windsurf orphan probe`. Common types: `feat`, `fix`,
+  `docs`, `test`, `refactor`, `ci`, `chore`.
 - Update `CHANGELOG.md` under `## [Unreleased]`.
 - Fill in the pull request template, including the safety checklist.
 

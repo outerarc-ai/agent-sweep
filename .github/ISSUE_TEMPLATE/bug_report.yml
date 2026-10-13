@@ -10,7 +10,7 @@ body:
         names — the scan output contains real filesystem paths. Redact them.
 
         If the tool touched something that should have been protected, stop and
-        read [SECURITY.md](../blob/main/SECURITY.md) instead of filing here.
+        read [SECURITY.md](https://github.com/outerarc-ai/agent-sweep/blob/main/SECURITY.md) instead of filing here.
   - type: input
     id: version
     attributes:
@@ -35,6 +35,7 @@ body:
         - clean
         - restore
         - trash
+        - ui
         - harnesses
         - doctor
     validations:

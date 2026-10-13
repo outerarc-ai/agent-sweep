@@ -33,9 +33,9 @@ a patch release and noted in `CHANGELOG.md`.
 
 ## Reporting
 
-Please **do not** open a public issue for a safety bug. Instead use GitHub's
-private vulnerability reporting on the repository (Security → Report a
-vulnerability), or email the maintainer listed in `package.json`.
+Please **do not** open a public issue for a safety bug. Report it privately
+through GitHub's private vulnerability reporting:
+[Security → Report a vulnerability](https://github.com/outerarc-ai/agent-sweep/security/advisories/new).
 
 Include:
 
