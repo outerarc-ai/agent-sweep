@@ -29,7 +29,14 @@ export async function loadPlanFile(file, registry) {
     actionBytes: plan.actions.reduce((sum, a) => sum + (a.sizeBytes || 0), 0),
   };
   if (!Array.isArray(plan.pruneRepos)) plan.pruneRepos = [];
+  plan.skipped = normalizeSkipped(plan.skipped);
   return plan;
+}
+
+function normalizeSkipped(skipped) {
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  const s = skipped && typeof skipped === 'object' ? skipped : {};
+  return { protected: num(s.protected), protectedBytes: num(s.protectedBytes), keep: num(s.keep), keepBytes: num(s.keepBytes) };
 }
 
 export function validatePlan(plan, registry) {
@@ -50,15 +57,22 @@ export function validatePlan(plan, registry) {
   }
 }
 
-// A plan file is user-supplied data. Every action must still belong to a
-// registry target, or a crafted file could point execution at arbitrary paths.
+// A plan file is user-supplied data. Every action must still pass the
+// deletion gate of the current registry, or a crafted or stale file could
+// execute report-only targets (login state, chat history, ...).
 function assertActionOwned(action, registry) {
   const harness = registry.byId.get(action.harnessId) || registry.resolve(action.harnessId);
   if (!harness) {
     throw new PlanFileError(`计划文件动作引用了未知 harness: ${action.harnessId}`);
   }
-  const roots = registryRoots(harness).map((r) => r.path);
-  if (!roots.some((root) => isPathInside(root, action.path))) {
+  if (!harness.deleteEnabled) {
+    throw new PlanFileError(`harness ${harness.id} 当前为仅报告模式，拒绝执行计划文件中的动作`);
+  }
+  const containing = registryRoots(harness).filter((r) => isPathInside(r.path, action.path));
+  if (containing.length === 0) {
     throw new PlanFileError(`计划文件动作 ${action.id} 的路径不在注册表目标范围内`);
+  }
+  if (containing.some((r) => !r.target.removable)) {
+    throw new PlanFileError(`计划文件动作 ${action.id} 落入仅报告目标，拒绝执行`);
   }
 }

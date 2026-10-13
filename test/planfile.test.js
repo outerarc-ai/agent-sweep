@@ -86,6 +86,27 @@ test('loadPlanFile recomputes totals and normalises pruneRepos from untrusted in
     assert.equal(loaded.totals.actionCount, 1);
     assert.equal(loaded.totals.actionBytes, 100);
     assert.deepEqual(loaded.pruneRepos, []);
+    assert.deepEqual(loaded.skipped, { protected: 0, protectedBytes: 0, keep: 0, keepBytes: 0 });
+  });
+});
+
+test('validatePlan refuses actions in report-only harnesses or report-only targets', async () => {
+  await withHome(async (home) => {
+    const reportOnlyHarness = {
+      schema: PLAN_SCHEMA,
+      actions: [{ id: 'windsurf:codeium-windsurf:cascade', harnessId: 'windsurf', path: path.join(home, '.codeium', 'windsurf', 'cascade') }],
+    };
+    assert.throws(() => validatePlan(reportOnlyHarness, registry), /仅报告模式/);
+
+    const reportOnlyTarget = {
+      schema: PLAN_SCHEMA,
+      actions: [{
+        id: 'trae:work-mode-projects:p',
+        harnessId: 'trae',
+        path: path.join(home, 'Library', 'Application Support', 'TRAE SOLO CN', 'ModularData', 'ai-agent', 'work-mode-projects', 'p'),
+      }],
+    };
+    assert.throws(() => validatePlan(reportOnlyTarget, registry), /仅报告目标/);
   });
 });
 

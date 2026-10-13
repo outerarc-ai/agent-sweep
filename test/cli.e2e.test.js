@@ -109,12 +109,14 @@ test('plan --save writes a plan file that clean --plan-file executes with re-ver
     // The unit disappears between planning and execution: it must be skipped by re-verification.
     await fs.rm(s2, { recursive: true });
 
-    const out = JSON.parse(await runCli(['clean', '--plan-file', planFile, '--yes', '--json', '--no-color', '--no-active-check'], env));
+    const htmlFile = path.join(home, 'report.html');
+    const out = JSON.parse(await runCli(['clean', '--plan-file', planFile, '--yes', '--json', '--no-color', '--no-active-check', '--html', htmlFile], env));
     assert.equal(out.execution.moved.length, 1);
     assert.match(out.execution.moved[0].path, /s1$/);
     assert.equal(out.execution.skipped.length, 1);
     assert.equal(out.execution.skipped[0].reason, 'missing');
     assert.match(out.execution.skipped[0].path, /s2$/);
+    assert.match(await fs.readFile(htmlFile, 'utf8'), /agent-sweep/);
 
     const batches = await fs.readdir(path.join(home, 'trash'));
     assert.equal(batches.length, 1);
@@ -132,6 +134,29 @@ test('clean --plan-file exits 2 on a version-mismatched plan file', async () => 
       () => runCli(['clean', '--plan-file', bad, '--yes', '--no-color'], env),
       (err) => err.code === 2,
     );
+  });
+});
+
+test('clean --plan-file refuses a crafted plan aimed at a report-only target', async () => {
+  await withHome(async (home, env) => {
+    const target = path.join(home, '.codeium', 'windsurf', 'cascade');
+    await fs.mkdir(target, { recursive: true });
+    await fs.writeFile(path.join(target, 'login.json'), '{}');
+    const evil = path.join(home, 'evil.json');
+    await fs.writeFile(
+      evil,
+      JSON.stringify({
+        schema: 'agent-sweep/plan@1',
+        actions: [{ id: 'windsurf:codeium-windsurf:cascade', harnessId: 'windsurf', path: target, sizeBytes: 2 }],
+      }),
+      'utf8',
+    );
+    await assert.rejects(
+      () => runCli(['clean', '--plan-file', evil, '--yes', '--no-color'], env),
+      (err) => err.code === 2,
+    );
+    const stillThere = await fs.stat(target).then(() => true, () => false);
+    assert.equal(stillThere, true);
   });
 });
 

@@ -8,10 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Plan persistence: `plan --save <file>` writes the `agent-sweep/plan@1` plan to
-  a JSON file and `clean --plan-file <file>` executes it later. Execution still
-  runs the full per-action re-verification (existence / guards / process
-  occupancy); vanished or protected items are skipped, and invalid or
-  version-mismatched plan files exit with code 2.
+  a JSON file and `clean --plan-file <file>` executes it later. A plan file is
+  treated as untrusted input: on load every action is re-checked against the
+  current registry (schema version, structure, target scope, and the
+  report-only gate), and execution still runs the full per-action
+  re-verification (existence / guards / process occupancy). Vanished or
+  in-use items are skipped; invalid, downgraded or version-mismatched plan
+  files exit with code 2.
 - English `README.md` as the primary readme; the Chinese readme moves to
   `README.zh-CN.md` with a language switcher in both.
 - CodeQL workflow (security-and-quality queries, weekly schedule).
