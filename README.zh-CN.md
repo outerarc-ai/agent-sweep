@@ -53,13 +53,17 @@ agent-sweep scan --html report.html
 # 3. 生成可审阅的清理计划（仍不写盘）
 agent-sweep plan --include-review
 
-# 4. 预演执行：完整走一遍复检与移动逻辑，但不落盘
+# 4. 计划落盘，评审后稍再执行（执行前逐项复检）
+agent-sweep plan --include-review --save plan.json
+agent-sweep clean --plan-file plan.json --yes
+
+# 5. 预演执行：完整走一遍复检与移动逻辑，但不落盘
 agent-sweep clean --include-review --dry-run
 
-# 5. 真正执行：移入回收站，可还原
+# 6. 真正执行：移入回收站，可还原
 agent-sweep clean --include-review --yes
 
-# 6. 后悔了：从回收站还原
+# 7. 后悔了：从回收站还原
 agent-sweep trash list
 agent-sweep restore 20261012-114530-9qmh
 ```
@@ -208,6 +212,8 @@ agent-sweep harnesses trae --verbose
 | `--json` | 以 JSON 输出 |
 | `--html <file>` | 写出自包含 HTML 报告 |
 | `--trash-root <path>` | 自定义回收站根目录 |
+| `--save <file>` | （`plan`）把计划写为 JSON 文件 |
+| `--plan-file <file>` | （`clean`）从已保存的计划文件执行（执行前逐项复检，过期项被拦下） |
 | `--concurrency <n>` | 并发测量数（默认 8） |
 | `--port <n>` / `--host <addr>` / `--open` | 本地 Web UI 端口 / 绑定地址 / 自动打开浏览器 |
 | `--verbose, -v` / `--quiet, -q` / `--no-color` | 日志与颜色控制 |

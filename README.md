@@ -57,13 +57,17 @@ agent-sweep scan --html report.html
 # 3. Build a reviewable cleanup plan (still read-only)
 agent-sweep plan --include-review
 
-# 4. Rehearse: run the full re-verification and move logic without writing
+# 4. Persist the plan, then execute it later (re-verified per item)
+agent-sweep plan --include-review --save plan.json
+agent-sweep clean --plan-file plan.json --yes
+
+# 5. Rehearse: run the full re-verification and move logic without writing
 agent-sweep clean --include-review --dry-run
 
-# 5. Execute: move items to the trash (reversible)
+# 6. Execute: move items to the trash (reversible)
 agent-sweep clean --include-review --yes
 
-# 6. Changed your mind? Restore from the trash
+# 7. Changed your mind? Restore from the trash
 agent-sweep trash list
 agent-sweep restore 20261012-114530-9qmh
 ```
@@ -214,6 +218,8 @@ Want another harness supported? Open a [harness request](https://github.com/oute
 | `--json` | Output JSON |
 | `--html <file>` | Write a self-contained HTML report |
 | `--trash-root <path>` | Custom trash root directory |
+| `--save <file>` | (`plan`) Write the plan to a JSON file |
+| `--plan-file <file>` | (`clean`) Execute a previously saved plan (re-verified per item) |
 | `--concurrency <n>` | Concurrent measurements (default 8) |
 | `--port <n>` / `--host <addr>` / `--open` | Web UI port / bind address / open browser |
 | `--verbose, -v` / `--quiet, -q` / `--no-color` | Logging and colour control |
