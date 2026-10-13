@@ -86,6 +86,55 @@ test('doctor --json reports environment checks', async () => {
   });
 });
 
+test('plan --save writes a plan file that clean --plan-file executes with re-verification', async () => {
+  await withHome(async (home, env) => {
+    const workDir = path.join(home, '.trae-cn', 'work');
+    const s1 = path.join(workDir, 's1');
+    const s2 = path.join(workDir, 's2');
+    const payload = Buffer.alloc(1024 * 1024);
+    const old = new Date(Date.now() - 40 * 24 * 3600 * 1000);
+    for (const dir of [s1, s2]) {
+      await fs.mkdir(dir, { recursive: true });
+      const file = path.join(dir, 'payload.bin');
+      await fs.writeFile(file, payload);
+      await fs.utimes(file, old, old);
+    }
+
+    const planFile = path.join(home, 'plan.json');
+    await runCli(['plan', '--save', planFile, '--include-review', '--no-color', '--no-active-check'], env);
+    const saved = JSON.parse(await fs.readFile(planFile, 'utf8'));
+    assert.equal(saved.schema, 'agent-sweep/plan@1');
+    assert.equal(saved.totals.actionCount, 2);
+
+    // The unit disappears between planning and execution: it must be skipped by re-verification.
+    await fs.rm(s2, { recursive: true });
+
+    const out = JSON.parse(await runCli(['clean', '--plan-file', planFile, '--yes', '--json', '--no-color', '--no-active-check'], env));
+    assert.equal(out.execution.moved.length, 1);
+    assert.match(out.execution.moved[0].path, /s1$/);
+    assert.equal(out.execution.skipped.length, 1);
+    assert.equal(out.execution.skipped[0].reason, 'missing');
+    assert.match(out.execution.skipped[0].path, /s2$/);
+
+    const batches = await fs.readdir(path.join(home, 'trash'));
+    assert.equal(batches.length, 1);
+    const manifest = JSON.parse(await fs.readFile(path.join(home, 'trash', batches[0], 'manifest.json'), 'utf8'));
+    assert.equal(manifest.entries.length, 1);
+    assert.equal(manifest.entries[0].originalPath, s1);
+  });
+});
+
+test('clean --plan-file exits 2 on a version-mismatched plan file', async () => {
+  await withHome(async (home, env) => {
+    const bad = path.join(home, 'bad.json');
+    await fs.writeFile(bad, JSON.stringify({ schema: 'agent-sweep/plan@2', actions: [] }), 'utf8');
+    await assert.rejects(
+      () => runCli(['clean', '--plan-file', bad, '--yes', '--no-color'], env),
+      (err) => err.code === 2,
+    );
+  });
+});
+
 test('an unknown command exits non-zero', async () => {
   await withHome(async (_home, env) => {
     await assert.rejects(() => runCli(['frobnicate'], env), (err) => err.code === 2);

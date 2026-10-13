@@ -33,6 +33,8 @@ export const USAGE = `agent-sweep — 跨 harness 的智能体残留工作区清
   --json                以 JSON 输出
   --html <file>         写出自包含 HTML 报告
   --trash-root <path>   自定义回收站根目录
+  --save <file>         （plan）把计划写为 JSON 文件
+  --plan-file <file>    （clean）从已保存的计划文件执行（执行前逐项复检）
   --concurrency <n>     并发测量数（默认 8）
   --port <n>            本地 Web UI 端口（默认 7317）
   --host <addr>         本地 Web UI 绑定地址（默认 127.0.0.1）
