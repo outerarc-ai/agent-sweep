@@ -41,8 +41,9 @@ function legend(byCircle, total) {
     .join('');
 }
 
-function harnessRows(summary) {
-  return summary.byHarness
+function harnessRows(summary, now) {
+  const rows = summary ? summary.byHarness : [];
+  return rows
     .map(
       (row) => `<tr>
       <td><span class="hname">${escapeHtml(row.harnessName)}</span>${row.deleteEnabled ? '' : '<span class="badge">仅报告</span>'}</td>
@@ -51,8 +52,8 @@ function harnessRows(summary) {
       <td class="num pos">${formatBytes(row.safeBytes)}</td>
       <td class="num warn">${formatBytes(row.reviewBytes)}</td>
       <td class="num neg">${formatBytes(row.protectedBytes)}</td>
-      <td class="num">${row.oldestMs ? formatAge(summary.now - row.oldestMs) : '—'}</td>
-      <td class="num">${row.newestMs ? formatAge(summary.now - row.newestMs) : '—'}</td>
+      <td class="num">${row.oldestMs ? formatAge(now - row.oldestMs) : '—'}</td>
+      <td class="num">${row.newestMs ? formatAge(now - row.newestMs) : '—'}</td>
     </tr>`,
     )
     .join('');
@@ -207,7 +208,7 @@ export function renderHtmlReport({ scan, summary, plan, execution = null, option
       <th class="num">安全圈</th><th class="num">待确认</th><th class="num">保护</th>
       <th class="num">最旧</th><th class="num">最新</th>
     </tr></thead>
-    <tbody>${harnessRows(summary)}</tbody>
+    <tbody>${harnessRows(summary, now)}</tbody>
   </table>
 
   <h2>第 1 圈 · 可安全清理</h2>

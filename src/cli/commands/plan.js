@@ -1,4 +1,5 @@
 import { buildPlan } from '../../core/planner.js';
+import { savePlanFile } from '../../core/planfile.js';
 import { renderPlan } from '../../core/reporter/terminal.js';
 import { emitJsonAndHtml, describeOptions, actionCircles } from './shared.js';
 
@@ -27,6 +28,13 @@ export async function run(ctx) {
       logger.out(
         logger.paint('gray', `  这是计划，尚未改动磁盘。执行请运行 "agent-sweep clean"${flags.includeReview ? ' --include-review' : ''}。`),
       );
+    }
+  }
+
+  if (flags.save) {
+    await savePlanFile(plan, flags.save);
+    if (!flags.json && !flags.quiet) {
+      logger.out(`计划已写入: ${flags.save}（稍后可用 "agent-sweep clean --plan-file ${flags.save}" 执行）`);
     }
   }
 
