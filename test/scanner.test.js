@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { scanHarness, scan, resolveEncodedCwd } from '../src/core/scanner.js';
+import { scanHarness, scan, resolveEncodedCwd, encodeCwd } from '../src/core/scanner.js';
 import { buildGuardSet } from '../src/safety/guards.js';
 import { loadRegistry } from '../src/core/registry.js';
 
@@ -21,26 +21,78 @@ async function writeOld(file, days) {
   await fs.utimes(file, when, when);
 }
 
-// encoded-cwd reconstruction rebuilds a path from its separator-encoded form,
-// which only makes sense for POSIX paths; Windows always reports "unknown".
-const posixOnly = process.platform === 'win32' ? 'encoded-cwd probing is POSIX-only' : false;
+// Claude Code encodes a session directory name by replacing every character
+// outside [A-Za-z0-9] with "-", so "_", "." and " " are indistinguishable from
+// "/" once encoded. The filesystem probe is POSIX-only; transcript evidence is
+// platform-independent.
+const posixOnly = process.platform === 'win32' ? 'filesystem probing is POSIX-only' : false;
 
-test('resolveEncodedCwd resolves a live host project', { skip: posixOnly }, async () => {
-  const dir = await mktmp('sweep-enc-');
-  const encoded = dir.replace(/\//g, '-');
-  const result = await resolveEncodedCwd(encoded);
-  assert.equal(result.status, 'live');
-  assert.ok(result.resolved === dir || result.resolved === (await fs.realpath(dir)));
-  await fs.rm(dir, { recursive: true, force: true });
+async function writeTranscript(sessionDir, cwd) {
+  await fs.mkdir(sessionDir, { recursive: true });
+  const lines = [
+    JSON.stringify({ type: 'queue-operation' }),
+    JSON.stringify({ type: 'user', cwd, message: { role: 'user', content: 'hi' } }),
+  ];
+  await fs.writeFile(path.join(sessionDir, 'abc.jsonl'), lines.join('\n') + '\n');
+}
+
+test('encodeCwd mirrors the Claude Code directory encoding', () => {
+  assert.equal(encodeCwd('/Users/me/my_app/v1.2'), '-Users-me-my-app-v1-2');
+  assert.equal(encodeCwd('/home/me/.config/has space'), '-home-me--config-has-space');
 });
 
-test('resolveEncodedCwd flags a missing host project as orphan', async () => {
+test('resolveEncodedCwd resolves live projects whose names contain _ . and spaces', { skip: posixOnly }, async () => {
+  const base = await fs.realpath(await mktmp('sweep-enc-'));
+  for (const name of ['my_app', 'v1.2', 'has space', 'a-b_c.d']) {
+    const dir = path.join(base, name);
+    await fs.mkdir(dir);
+    const result = await resolveEncodedCwd(encodeCwd(dir), { platform: 'linux' });
+    assert.equal(result.status, 'live', name);
+    assert.equal(result.resolved, dir);
+  }
+  await fs.rm(base, { recursive: true, force: true });
+});
+
+test('resolveEncodedCwd reports unknown, not orphan, when nothing on disk matches', async () => {
   const result = await resolveEncodedCwd('-zzz-no-such-project-999', { platform: 'linux' });
-  assert.equal(result.status, 'orphan');
+  assert.equal(result.status, 'unknown');
   assert.equal(result.resolved, null);
 });
 
-test('resolveEncodedCwd reports unknown on Windows', async () => {
+test('resolveEncodedCwd flags orphan only on transcript evidence', async () => {
+  const base = await mktmp('sweep-enc-');
+  const gone = path.join(base, 'gone_project');
+  const sessionDir = path.join(base, 'projects', encodeCwd(gone));
+  await writeTranscript(sessionDir, gone);
+  const result = await resolveEncodedCwd(encodeCwd(gone), { sessionDir });
+  assert.equal(result.status, 'orphan');
+  assert.equal(result.at, gone);
+  assert.equal(result.evidence, 'transcript-cwd');
+  await fs.rm(base, { recursive: true, force: true });
+});
+
+test('resolveEncodedCwd trusts a transcript cwd that still exists', async () => {
+  const base = await mktmp('sweep-enc-');
+  const live = path.join(base, 'live_project');
+  await fs.mkdir(live);
+  const sessionDir = path.join(base, 'projects', encodeCwd(live));
+  await writeTranscript(sessionDir, live);
+  const result = await resolveEncodedCwd(encodeCwd(live), { sessionDir, platform: 'win32' });
+  assert.equal(result.status, 'live');
+  assert.equal(result.resolved, live);
+  await fs.rm(base, { recursive: true, force: true });
+});
+
+test('resolveEncodedCwd ignores transcript cwds that do not encode to the directory name', async () => {
+  const base = await mktmp('sweep-enc-');
+  const sessionDir = path.join(base, 'projects', '-zzz-unrelated-name');
+  await writeTranscript(sessionDir, path.join(base, 'somewhere_else'));
+  const result = await resolveEncodedCwd('-zzz-unrelated-name', { sessionDir, platform: 'linux' });
+  assert.equal(result.status, 'unknown');
+  await fs.rm(base, { recursive: true, force: true });
+});
+
+test('resolveEncodedCwd reports unknown on Windows without transcript evidence', async () => {
   const result = await resolveEncodedCwd('-anything', { platform: 'win32' });
   assert.equal(result.status, 'unknown');
   assert.equal(result.resolved, null);

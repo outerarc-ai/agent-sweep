@@ -62,6 +62,91 @@ for (const file of files) {
   }
 }
 
+/* ---------------- i18n checks (src/web/public) ----------------
+ * The browser SPA keeps all copy in i18n.js (zh-CN + en-US tables) and
+ * looks it up via t('key') in app.js. These checks keep the call sites
+ * and both locale tables consistent so a missing translation can never
+ * silently degrade to a raw key at runtime.
+ */
+const i18nFile = path.join(SRC, 'web', 'public', 'i18n.js');
+const appFile = path.join(SRC, 'web', 'public', 'app.js');
+
+function localeKeys(text, marker, endPattern) {
+  const markerAt = text.indexOf(marker);
+  if (markerAt < 0) return null;
+  const openAt = text.indexOf('{', markerAt);
+  const endAt = endPattern ? text.indexOf(endPattern, openAt) : text.length;
+  if (openAt < 0 || (endPattern && endAt < 0)) return null;
+  const block = text.slice(openAt + 1, endAt);
+  const keys = new Set();
+  const re = /^[ \t]*(?:'([\w.\-]+)'|"([\w.\-]+)"|(\w+))\s*:/gm;
+  let m;
+  while ((m = re.exec(block)) !== null) keys.add(m[1] || m[2] || m[3]);
+  return keys;
+}
+
+const i18nText = await fs.readFile(i18nFile, 'utf8');
+const appText = await fs.readFile(appFile, 'utf8');
+
+const zhKeys = localeKeys(i18nText, "'zh-CN':", "'en-US':");
+const enKeys = localeKeys(i18nText, "'en-US':", '\n  };');
+if (!zhKeys) problems.push('i18n.js: zh-CN locale table not found');
+if (!enKeys) problems.push('i18n.js: en-US locale table not found');
+
+if (zhKeys && enKeys) {
+  for (const key of [...zhKeys].sort()) {
+    if (!enKeys.has(key)) problems.push(`i18n.js: key "${key}" missing from en-US`);
+  }
+  for (const key of [...enKeys].sort()) {
+    if (!zhKeys.has(key)) problems.push(`i18n.js: key "${key}" missing from zh-CN`);
+  }
+
+  // Literal t('key') call sites must resolve in both locales.
+  const referenced = new Set();
+  const litRe = /\bt\(\s*(['"])([\w.\-]+)\1\s*[,)]/g;
+  let m;
+  while ((m = litRe.exec(appText)) !== null) referenced.add(m[2]);
+  for (const key of [...referenced].sort()) {
+    if (!zhKeys.has(key)) problems.push(`app.js: t('${key}') has no zh-CN entry`);
+    if (!enKeys.has(key)) problems.push(`app.js: t('${key}') has no en-US entry`);
+  }
+
+  // Dynamic t(`family.${code}`) call sites: every known enum value of the
+  // family must be translated in both locales.
+  const dynRe = /\bt\(\s*`(\w+)\.\$\{/g;
+  const families = new Set();
+  while ((m = dynRe.exec(appText)) !== null) families.add(m[1]);
+  // Enum values are the full key suffix after the family prefix, so
+  // t(`step.${id}.label`) is expressed as 'scan.label', 'select.hint', …
+  const familyEnums = {
+    circle: ['safe', 'review', 'protected', 'keep'],
+    reason: [
+      'hard-guard', 'target-report-only', 'contains-protected', 'in-use',
+      'within-ttl', 'below-min-size', 'orphan', 'stale', 'asset-file',
+      'sensitive-name',
+    ],
+    step: [
+      'scan.label', 'scan.hint', 'select.label', 'select.hint',
+      'plan.label', 'plan.hint', 'execute.label', 'execute.hint',
+      'trash.label', 'trash.hint',
+    ],
+  };
+  for (const family of families) {
+    const enums = familyEnums[family];
+    if (!enums) {
+      problems.push(`i18n: unknown dynamic family "${family}"; add its enum list to lint.js`);
+      continue;
+    }
+    for (const code of enums) {
+      const key = `${family}.${code}`;
+      if (!zhKeys.has(key)) problems.push(`i18n.js: dynamic key "${key}" missing from zh-CN`);
+      if (!enKeys.has(key)) problems.push(`i18n.js: dynamic key "${key}" missing from en-US`);
+    }
+  }
+
+  process.stdout.write(`i18n · ${zhKeys.size} keys × 2 locales · ${referenced.size} referenced · ${families.size} dynamic families\n`);
+}
+
 process.stdout.write(`agent-sweep lint · ${files.length} modules checked\n`);
 for (const warning of warnings) process.stdout.write(`  ! ${warning}\n`);
 for (const problem of problems) process.stdout.write(`  ✗ ${problem}\n`);

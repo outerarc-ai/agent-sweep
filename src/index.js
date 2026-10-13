@@ -1,5 +1,5 @@
 export { loadRegistry, describeHarness, availableHarnesses, buildRegistryGuards } from './core/registry.js';
-export { scan, scanHarness, resolveEncodedCwd } from './core/scanner.js';
+export { scan, scanHarness, resolveEncodedCwd, encodeCwd } from './core/scanner.js';
 export { analyzeUnits, analyzeUnit, summarize } from './core/analyzer.js';
 export { buildPlan, selectActions, toAction, actionId, PLAN_SCHEMA } from './core/planner.js';
 export { executePlan } from './core/executor.js';

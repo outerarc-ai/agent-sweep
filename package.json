@@ -28,6 +28,7 @@
     "src",
     "docs",
     "README.md",
+    "README.zh-CN.md",
     "LICENSE",
     "CHANGELOG.md"
   ],
@@ -38,7 +39,9 @@
     "start": "node ./bin/agent-sweep.js",
     "test": "node --test",
     "lint": "node ./scripts/lint.js",
-    "check": "node ./scripts/selfcheck.js"
+    "check": "node ./scripts/selfcheck.js",
+    "pack:check": "node ./scripts/pack-check.js",
+    "prepublishOnly": "npm test && npm run lint && npm run check && npm run pack:check"
   },
   "repository": {
     "type": "git",
@@ -55,5 +58,9 @@
     "darwin",
     "linux",
     "win32"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }

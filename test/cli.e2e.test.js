@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
@@ -138,5 +138,16 @@ test('clean --plan-file exits 2 on a version-mismatched plan file', async () => 
 test('an unknown command exits non-zero', async () => {
   await withHome(async (_home, env) => {
     await assert.rejects(() => runCli(['frobnicate'], env), (err) => err.code === 2);
+  });
+});
+test('a closed stdout pipe exits cleanly instead of crashing', { skip: process.platform === 'win32' && 'EPIPE semantics differ on Windows' }, async () => {
+  await withHome(async (_home, env) => {
+    const child = spawn(process.execPath, [BIN, 'harnesses', '--verbose'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.stdout.once('data', () => child.stdout.destroy());
+    const code = await new Promise((resolve) => child.on('close', resolve));
+    assert.equal(code, 0);
+    assert.doesNotMatch(stderr, /EPIPE|Unhandled/);
   });
 });

@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { lstatSafe, listDir, measureTree, exists } from '../lib/fsx.js';
+import fs from 'node:fs/promises';
+import { lstatSafe, listDir, measureTree, exists, readText } from '../lib/fsx.js';
 import { toPosix, displayPath, isPathInside } from '../lib/paths.js';
 import { matchGlob } from '../lib/matcher.js';
 import { inspectWorktree } from '../lib/gitworktree.js';
@@ -38,39 +39,97 @@ async function walkFiles(root, limit = FILE_WALK_LIMIT) {
   return { files, truncated: false };
 }
 
-const encodedCache = new Map();
+// Claude Code names a session directory after its working directory with every
+// character outside [A-Za-z0-9] replaced by "-". The mapping is lossy ("_", ".",
+// " ", "-" and non-ASCII all collapse to "-"), so a name cannot be decoded by
+// splitting on "-". Orphan detection therefore prefers hard evidence (the `cwd`
+// recorded in the session transcripts) and only falls back to matching the name
+// against what actually exists on disk. A name that cannot be resolved either
+// way is reported as unknown, never as orphan: being wrong here means a live
+// project's history lands in the default-clean circle.
+export function encodeCwd(cwd) {
+  return String(cwd).replace(/[^a-zA-Z0-9]/g, '-');
+}
 
-export async function resolveEncodedCwd(encoded, { platform = PLATFORM } = {}) {
-  if (platform === 'win32') return { status: 'unknown', resolved: null };
-  if (encodedCache.has(encoded)) return encodedCache.get(encoded);
+const TRANSCRIPT_FILES = 8;
+const TRANSCRIPT_BYTES = 256 * 1024;
+const PROBE_DIR_LIMIT = 2000;
 
-  const trimmed = String(encoded).replace(/^[-_]+/, '');
-  const parts = trimmed.split('-').filter(Boolean);
-  let current = path.sep;
-  let index = 0;
-
-  while (index < parts.length) {
-    let matched = false;
-    for (let end = parts.length; end > index; end -= 1) {
-      const candidate = parts.slice(index, end).join('-');
-      const probe = path.join(current, candidate);
-      if (await exists(probe)) {
-        current = probe;
-        index = end;
-        matched = true;
-        break;
+async function recordedCwds(sessionDir) {
+  const entries = await listDir(sessionDir);
+  const files = entries
+    .filter((e) => e.isFile() && e.name.endsWith('.jsonl'))
+    .map((e) => path.join(sessionDir, e.name))
+    .slice(0, TRANSCRIPT_FILES);
+  const cwds = new Set();
+  for (const file of files) {
+    const text = await readText(file, TRANSCRIPT_BYTES);
+    if (!text) continue;
+    for (const line of text.split('\n')) {
+      if (!line.includes('"cwd"')) continue;
+      try {
+        const record = JSON.parse(line);
+        if (record && typeof record.cwd === 'string' && record.cwd) cwds.add(record.cwd);
+      } catch {
+        // Partial trailing line or a non-JSON record.
       }
     }
-    if (!matched) {
-      const result = { status: 'orphan', resolved: null, at: current };
-      encodedCache.set(encoded, result);
-      return result;
+  }
+  return [...cwds];
+}
+
+async function probeEncodedPath(encoded) {
+  // Depth-first walk from the filesystem root, descending only into children
+  // whose encoded name is a prefix of the remaining encoded string.
+  let budget = PROBE_DIR_LIMIT;
+
+  async function walk(dir, rest) {
+    if (rest === '') return dir;
+    if (budget <= 0) return null;
+    budget -= 1;
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return null;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+      const enc = encodeCwd(entry.name);
+      if (rest === enc) return path.join(dir, entry.name);
+      if (rest.startsWith(enc + '-')) {
+        const found = await walk(path.join(dir, entry.name), rest.slice(enc.length + 1));
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  // The leading "-" encodes the root separator.
+  if (!encoded.startsWith('-')) return null;
+  return walk(path.sep, encoded.slice(1));
+}
+
+export async function resolveEncodedCwd(encoded, { platform = PLATFORM, sessionDir = null } = {}) {
+  const name = String(encoded);
+
+  if (sessionDir) {
+    const matching = (await recordedCwds(sessionDir)).filter((cwd) => encodeCwd(cwd) === name);
+    if (matching.length > 0) {
+      for (const cwd of matching) {
+        if (await exists(cwd)) return { status: 'live', resolved: cwd, evidence: 'transcript-cwd' };
+      }
+      return { status: 'orphan', resolved: null, at: matching[0], evidence: 'transcript-cwd' };
     }
   }
 
-  const result = { status: 'live', resolved: current };
-  encodedCache.set(encoded, result);
-  return result;
+  if (platform === 'win32') return { status: 'unknown', resolved: null, evidence: null };
+
+  const found = await probeEncodedPath(name);
+  if (found) return { status: 'live', resolved: found, evidence: 'filesystem-probe' };
+  // No transcript evidence and no matching path: the encoding may be truncated,
+  // a parent may be unreadable, or the name may not be an encoded cwd at all.
+  return { status: 'unknown', resolved: null, evidence: null };
 }
 
 function isNestedDepth(relative, depth) {
@@ -132,13 +191,12 @@ async function resolveOrphan(target, unitPath) {
   }
   if (type === 'encoded-cwd') {
     const name = path.basename(unitPath);
-    const resolved = await resolveEncodedCwd(name);
+    const resolved = await resolveEncodedCwd(name, { sessionDir: unitPath });
     if (resolved.status === 'unknown') return { orphan: false, reason: 'unresolved-encoding', detail: null };
-    return {
-      orphan: resolved.status === 'orphan',
-      reason: resolved.status === 'orphan' ? 'host-project-missing' : 'host-project-present',
-      detail: resolved.resolved ? displayPath(resolved.resolved) : null,
-    };
+    if (resolved.status === 'orphan') {
+      return { orphan: true, reason: 'host-project-missing', detail: resolved.at ? displayPath(resolved.at) : null };
+    }
+    return { orphan: false, reason: 'host-project-present', detail: displayPath(resolved.resolved) };
   }
   return { orphan: false, reason: 'unknown-type', detail: null };
 }
