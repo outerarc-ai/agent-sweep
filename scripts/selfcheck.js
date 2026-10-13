@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { loadRegistry, buildRegistryGuards } from '../src/core/registry.js';
-import { scan } from '../src/core/scanner.js';
+import { scan, encodeCwd } from '../src/core/scanner.js';
 import { analyzeUnits, summarize } from '../src/core/analyzer.js';
 import { buildPlan } from '../src/core/planner.js';
 import { executePlan } from '../src/core/executor.js';
@@ -46,12 +46,20 @@ async function buildFixture(home) {
   await writeOld(path.join(liveWt, '.git'), 40, `gitdir: ${path.join(home, 'main-repo', '.git', 'worktrees', 'live-branch')}\n`);
   await writeOld(path.join(liveWt, 'work.txt'), 40);
 
+  // A session whose transcript records a host project that no longer exists is
+  // a proven orphan; one without transcript evidence cannot be proven either way.
+  const goneHost = path.join(home, 'gone_host.project');
+  await writeOld(
+    path.join(home, '.claude', 'projects', encodeCwd(goneHost), 'session.jsonl'),
+    40,
+    `${JSON.stringify({ type: 'user', cwd: goneHost })}\n`,
+  );
   await writeOld(path.join(home, '.claude', 'projects', '-no-such-host-zzz', 'session.jsonl'), 40);
   await writeOld(path.join(home, '.claude', 'projects', '-tmp-x', 'session.jsonl'), 40);
   await writeOld(path.join(home, '.claude', 'projects', '-tmp-x', 'memory', 'note.md'), 40);
   await writeOld(path.join(home, '.claude', 'plugins', 'foo', 'index.js'), 40);
 
-  return { orphanWt, liveWt, activeFile };
+  return { orphanWt, liveWt, activeFile, goneHost };
 }
 
 async function main() {
@@ -88,7 +96,7 @@ async function main() {
     const units = analyzeUnits(scanResult.units, { now: Date.now(), strategy });
     const summary = summarize(units, { now: Date.now() });
 
-    check('扫描到全部合成单元', units.length === 7, `${units.length} 个单元`);
+    check('扫描到全部合成单元', units.length === 8, `${units.length} 个单元`);
 
     const byRel = (needle) => units.find((u) => u.path.endsWith(needle));
     const orphan = byRel('orphan-branch');
@@ -101,21 +109,19 @@ async function main() {
     check('含 memory 的会话目录落入保护圈', protectedDir && protectedDir.circle === CIRCLES.PROTECTED, protectedDir ? protectedDir.protectedReason : 'missing');
     check('进程占用单元落入保护圈', activeUnit && activeUnit.active === true && activeUnit.circle === CIRCLES.PROTECTED, activeUnit ? activeUnit.circleReason : 'missing');
 
-    // encoded-cwd orphan probing rebuilds POSIX paths, so it is unavailable on
-    // Windows. There the encoded session directory cannot be proven orphan and
-    // is held back in the review circle instead of being auto-cleaned — the safe
-    // outcome, not a regression.
-    const windows = process.platform === 'win32';
-    const expectedSafe = windows ? 1 : 2;
-    const expectedReview = windows ? 4 : 3;
-
-    check('安全圈计数正确', summary.byCircle.safe.count === expectedSafe, `${summary.byCircle.safe.count} / 期望 ${expectedSafe}`);
-    check('待确认圈计数正确', summary.byCircle.review.count === expectedReview, `${summary.byCircle.review.count} / 期望 ${expectedReview}`);
+    check('安全圈计数正确', summary.byCircle.safe.count === 2, `${summary.byCircle.safe.count} / 期望 2`);
+    check('待确认圈计数正确', summary.byCircle.review.count === 4, `${summary.byCircle.review.count} / 期望 4`);
     check('保护圈计数正确', summary.byCircle.protected.count === 2, String(summary.byCircle.protected.count));
+    const goneHostUnit = byRel(encodeCwd(fixture.goneHost));
+    check(
+      '会话记录证实宿主项目已删除时判为孤儿',
+      Boolean(goneHostUnit) && goneHostUnit.orphan === true && goneHostUnit.circle === CIRCLES.SAFE,
+      goneHostUnit ? goneHostUnit.circle : 'missing',
+    );
     const unresolvedHost = byRel('-no-such-host-zzz');
     check(
-      '无法判定宿主项目的会话按平台降级',
-      Boolean(unresolvedHost) && unresolvedHost.circle === (windows ? CIRCLES.REVIEW : CIRCLES.SAFE),
+      '无法证实宿主项目缺失的会话不判孤儿',
+      Boolean(unresolvedHost) && unresolvedHost.orphan === false && unresolvedHost.circle === CIRCLES.REVIEW,
       unresolvedHost ? unresolvedHost.circle : 'missing',
     );
 
@@ -126,7 +132,7 @@ async function main() {
       options: { circles: [CIRCLES.SAFE, CIRCLES.REVIEW], harnessIds: ['trae', 'claude-code'] },
     });
     const actionCircles = new Set(plan.actions.map((a) => a.circle));
-    check('计划包含安全圈与待确认圈动作', plan.totals.actionCount === 5, String(plan.totals.actionCount));
+    check('计划包含安全圈与待确认圈动作', plan.totals.actionCount === 6, String(plan.totals.actionCount));
     check('计划从不包含保护圈对象', !actionCircles.has(CIRCLES.PROTECTED));
 
     const dryRun = await executePlan(plan, { dryRun: true, guardSet, openFiles, home });

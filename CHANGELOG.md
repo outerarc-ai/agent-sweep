@@ -37,6 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repository, and an `author` field was added.
 
 ### Fixed
+- Claude Code sessions are no longer misclassified as orphans (and auto-cleaned
+  in the safe circle) when the project path contains `_`, `.`, spaces or other
+  non-alphanumeric characters. Claude Code encodes every such character as `-`,
+  which the previous `/`-only decoder could not reverse. Orphan status now
+  requires transcript evidence (the recorded `cwd` no longer exists); a
+  directory that cannot be resolved is reported as unknown and stays in the
+  review circle. The resolver also no longer caches results for the lifetime of
+  the process, so a long-running `ui` server sees projects deleted after start.
 - Guard evaluation no longer treats filename heuristics (e.g. `.env.example`,
   `AGENTS.md`) as directory-level protection, so a session directory that merely
   contains a template file is no longer frozen out of cleanup.
