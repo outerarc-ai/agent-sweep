@@ -247,7 +247,7 @@ agent-sweep harnesses trae --verbose
 
 ```bash
 npm test        # Node 内置测试运行器，90+ 用例
-npm run lint    # 零依赖静态检查（包卫生 / 模块可加载 / 源码启发式）
+npm run lint    # 零依赖静态检查（包卫生 / 模块可加载 / 源码启发式 / i18n 键覆盖）
 npm run check   # 端到端自检：合成 fixture 上跑完整流水线 + 回收/还原往返
 ```
 

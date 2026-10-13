@@ -55,9 +55,17 @@ function circleLabel(key) {
 
 function reasonLabel(reason) {
   if (!reason) return '';
+  // Reason codes can be exact ('hard-guard'), parameterized ('in-use:lsof')
+  // or variant-bearing ('stale-cache'). Try the exact base first, then the
+  // family head before the first hyphen, then fall back to the raw code.
   const base = String(reason).split(':')[0];
-  const label = t(`reason.${base}`);
-  return label === `reason.${base}` ? reason : label;
+  const head = base.split('-')[0];
+  for (const candidate of [base, head]) {
+    if (candidate === '') continue;
+    const label = t(`reason.${candidate}`);
+    if (label !== `reason.${candidate}`) return label;
+  }
+  return reason;
 }
 
 async function api(path, { method = 'GET', body } = {}) {
