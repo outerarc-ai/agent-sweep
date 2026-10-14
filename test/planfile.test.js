@@ -7,6 +7,7 @@ import { savePlanFile, loadPlanFile, validatePlan, PlanFileError } from '../src/
 import { buildPlan, PLAN_SCHEMA } from '../src/core/planner.js';
 import { loadRegistry } from '../src/core/registry.js';
 import { CIRCLES } from '../src/lib/strategy.js';
+import { appSupportDir } from '../src/lib/paths.js';
 
 const registry = loadRegistry();
 
@@ -103,7 +104,9 @@ test('validatePlan refuses actions in report-only harnesses or report-only targe
       actions: [{
         id: 'trae:work-mode-projects:p',
         harnessId: 'trae',
-        path: path.join(home, 'Library', 'Application Support', 'TRAE SOLO CN', 'ModularData', 'ai-agent', 'work-mode-projects', 'p'),
+        // appSupportDir() resolves the same {appSupport} token the registry uses,
+        // so the action stays inside the target root on every platform.
+        path: path.join(appSupportDir(), 'TRAE SOLO CN', 'ModularData', 'ai-agent', 'work-mode-projects', 'p'),
       }],
     };
     assert.throws(() => validatePlan(reportOnlyTarget, registry), /仅报告目标/);

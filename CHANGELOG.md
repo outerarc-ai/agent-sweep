@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The plan-file report-only test fixture hard-coded a macOS application-support
+  path, so it failed on Linux and Windows. The path is now derived from the same
+  `{appSupport}` token the registry resolves, keeping the assertion
+  platform-independent.
+
 ### Added
 - Plan persistence: `plan --save <file>` writes the `agent-sweep/plan@1` plan to
   a JSON file and `clean --plan-file <file>` executes it later. A plan file is
