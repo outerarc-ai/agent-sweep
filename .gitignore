@@ -25,3 +25,10 @@ reports/
 .env
 .env.*
 !.env.example
+
+# local AI agent instructions (not for version control)
+AGENTS.md
+
+# local ELI5 / HTML share artifacts
+.trae-html-share-packages/
+eli5-*.html
