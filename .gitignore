@@ -25,3 +25,6 @@ reports/
 .env
 .env.*
 !.env.example
+
+# local AI agent instructions (not for version control)
+AGENTS.md
